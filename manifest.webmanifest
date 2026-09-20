@@ -1,0 +1,13 @@
+{
+  "name": "Archer Board",
+  "short_name": "Archer",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1a1a19",
+  "theme_color": "#1a1a19",
+  "description": "Unvalidated cross-book screen, baseline form and matchup heuristic. Not the model.",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

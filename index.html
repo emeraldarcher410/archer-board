@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Archer Board</title>
+<meta name="description" content="Unvalidated cross-book screen, baseline form and matchup heuristic. Not the model.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a19">
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --surface-2: #f0efec; --line: #dcdbd6;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #7a7973;
+    --accent: #2a78d6; --good: #0ca30c; --warn: #fab219; --critical: #d03b3b;
+    --meter-track: #e6e5e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface: #1a1a19; --surface-2: #242423; --line: #383835;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8f8e86;
+      --accent: #3987e5; --meter-track: #2f2f2d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #1a1a19; --surface-2: #242423; --line: #383835;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8f8e86;
+    --accent: #3987e5; --meter-track: #2f2f2d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--surface); color: var(--ink);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+  .banner { position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 10px 16px;
+    background: var(--warn); color: #0b0b0b; font-weight: 600; font-size: 13px; }
+  header { padding: 14px 0 6px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .meta { color: var(--ink-2); font-size: 13px; }
+  .filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin: 0 -16px; padding-left: 16px;
+    scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+    border-radius: 999px; padding: 8px 14px; font-size: 14px; min-height: 40px; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .search { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px;
+    background: var(--surface-2); color: var(--ink); font-size: 16px; margin: 4px 0 10px; }
+  .count { color: var(--ink-3); font-size: 13px; margin-bottom: 8px; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+    background: var(--surface); }
+  .card summary { list-style: none; cursor: pointer; }
+  .card summary::-webkit-details-marker { display: none; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .player { font-weight: 650; font-size: 16px; }
+  .game { color: var(--ink-3); font-size: 12px; }
+  .pick { font-size: 15px; margin-top: 2px; }
+  .pick b { font-variant-numeric: tabular-nums; }
+  .agree { flex: 0 0 auto; border-radius: 8px; padding: 3px 8px; font-size: 12px; font-weight: 700;
+    background: var(--surface-2); color: var(--ink-2); }
+  .agree.a3 { background: var(--good); color: #fff; }
+  .agree.a2 { border: 2px solid var(--good); color: var(--ink); }
+  .meters { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
+  .m { display: grid; grid-template-columns: 58px 1fr 52px 60px; align-items: center; gap: 8px; font-size: 13px; }
+  .m .lbl { color: var(--ink-2); }
+  .m .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .m .ok { font-size: 12px; color: var(--ink-2); }
+  .m .ok.yes { color: var(--good); font-weight: 700; }
+  .track { position: relative; height: 10px; background: var(--meter-track); border-radius: 0 5px 5px 0; overflow: visible; }
+  .fill { height: 100%; background: var(--accent); border-radius: 0 5px 5px 0; }
+  .be { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--ink-3); }
+  .detail { margin-top: 10px; color: var(--ink-2); font-size: 13px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+  .detail dt { color: var(--ink-3); }
+  .detail dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .tier { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; }
+  .empty { color: var(--ink-2); padding: 30px 0; text-align: center; }
+  footer { color: var(--ink-3); font-size: 12px; margin-top: 18px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="banner" role="status">UNVALIDATED — another book's price, a player's recent form and a matchup heuristic. Not the model. Bet small, log every entry.</div>
+<header>
+  <h1>Archer Board</h1>
+  <div class="meta" id="meta">loading…</div>
+</header>
+<input class="search" id="q" type="search" placeholder="Search player or team" autocomplete="off">
+<div class="filters" id="agreeFilters" role="group" aria-label="Minimum agreement">
+  <button class="chip" data-agree="3" aria-pressed="false">All 3 agree</button>
+  <button class="chip" data-agree="2" aria-pressed="true">2+ agree</button>
+  <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
+</div>
+<div class="filters" id="marketFilters" role="group" aria-label="Market"></div>
+<div class="count" id="count"></div>
+<main id="list"></main>
+<footer>
+  <div><b>Book</b>: the reference book's devigged price at Underdog's line. <b>Form</b>: the player's last 8 games (baseline a). <b>Matchup</b>: form × opponent allowed rate × game script × environment (heuristic).</div>
+  <div>Tier: <i>exact</i> same line · <i>bound</i> reference price is a floor · <i>approx</i> translated across the line gap. The tick on each meter is Underdog's breakeven.</div>
+  <div id="stamp"></div>
+</footer>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const state = { rows: [], meta: {}, agree: 2, market: "all", q: "" };
+  const pct = (p) => p == null ? "—" : (p * 100).toFixed(0) + "%";
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  function meter(label, p, be) {
+    if (p == null) return `<div class="m"><span class="lbl">${label}</span><div class="track"><span class="be" style="left:${be*100}%"></span></div><span class="val">—</span><span class="ok">no data</span></div>`;
+    const yes = p >= be;
+    return `<div class="m"><span class="lbl">${label}</span>
+      <div class="track" aria-hidden="true"><div class="fill" style="width:${Math.min(100, p*100)}%"></div><span class="be" style="left:${be*100}%"></span></div>
+      <span class="val">${pct(p)}</span><span class="ok ${yes ? "yes" : ""}">${yes ? "✓ clears" : "under"}</span></div>`;
+  }
+
+  function card(r) {
+    const be = r.breakeven_p ?? state.meta.breakeven_p ?? 0.578;
+    const a = r.agree_count ?? 0;
+    const side = r.side === "over" ? "Higher" : "Lower";
+    const game = r.away_team && r.home_team ? `${esc(r.away_team)} @ ${esc(r.home_team)}` : "";
+    const drivers = r.drivers ? esc(r.drivers) : "";
+    return `<details class="card">
+      <summary>
+        <div class="row"><span class="player">${esc(r.player_ref)}</span><span class="agree a${a}" aria-label="${a} of 3 agree">${a}/3</span></div>
+        <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
+        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.ud_line}</b><span class="tier">${esc(r.tier)}</span></div>
+        <div class="meters">
+          ${meter("Book", r.p_hit_at_ud_line, be)}
+          ${meter("Form", r.p_naive, be)}
+          ${meter("Matchup", r.p_matchup, be)}
+        </div>
+      </summary>
+      <div class="detail"><dl>
+        <dt>Reference line</dt><dd>${r.ref_line ?? "—"} (${r.ref_over_price ?? "—"} / ${r.ref_under_price ?? "—"})</dd>
+        <dt>Form mean</dt><dd>${r.form_mean ?? "—"}${r.n_games ? " over " + r.n_games + " games" : ""}${r.recent_hit_rate != null ? " · hit " + pct(r.recent_hit_rate) : ""}</dd>
+        <dt>Projection</dt><dd>${r.proj_mean ?? "—"}${r.proj_sd ? " ± " + r.proj_sd : ""}</dd>
+        <dt>Drivers</dt><dd>${drivers || "—"}</dd>
+        <dt>Edge vs book</dt><dd>${r.edge != null ? (r.edge >= 0 ? "+" : "") + (r.edge*100).toFixed(1) + " pts" : "—"}</dd>
+      </dl></div>
+    </details>`;
+  }
+
+  function render() {
+    const q = state.q.trim().toLowerCase();
+    let rows = state.rows.filter((r) => (r.agree_count ?? 0) >= state.agree);
+    if (state.market !== "all") rows = rows.filter((r) => r.market === state.market);
+    if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent].some((v) => String(v ?? "").toLowerCase().includes(q)));
+    rows.sort((x, y) => (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? 0) - (x.edge ?? 0));
+    $("#count").textContent = `${rows.length} of ${state.rows.length} rows`;
+    $("#list").innerHTML = rows.length ? rows.map(card).join("") : `<div class="empty">Nothing clears the filter. Loosen it, or wait for a fresh screen.</div>`;
+  }
+
+  function buildMarketChips() {
+    const markets = [...new Set(state.rows.map((r) => r.market))];
+    const label = (m) => (state.rows.find((r) => r.market === m) || {}).market_label || m;
+    const el = $("#marketFilters");
+    el.innerHTML = [`<button class="chip" data-market="all" aria-pressed="true">All markets</button>`]
+      .concat(markets.map((m) => `<button class="chip" data-market="${esc(m)}" aria-pressed="false">${esc(label(m))}</button>`)).join("");
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-market]"); if (!b) return;
+      state.market = b.dataset.market;
+      el.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      render();
+    });
+  }
+
+  $("#agreeFilters").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-agree]"); if (!b) return;
+    state.agree = Number(b.dataset.agree);
+    $("#agreeFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+  $("#q").addEventListener("input", (e) => { state.q = e.target.value; render(); });
+
+  fetch("./data/screen.json?v=" + Date.now(), { cache: "no-store" })
+    .then((r) => r.json())
+    .then((data) => {
+      state.rows = data.rows || []; state.meta = data.meta || {};
+      const asOf = (state.meta.as_of || "").replace(/T(\d\d)-(\d\d)-(\d\d)Z/, " $1:$2 UTC");
+      $("#meta").textContent = `Screen ${asOf} · ${state.rows.length} lines · vs ${state.meta.reference_book || "reference"}`;
+      $("#stamp").textContent = `Exported ${state.meta.exported_at || ""}`;
+      buildMarketChips(); render();
+    })
+    .catch(() => { $("#meta").textContent = "No screen published yet."; $("#list").innerHTML = `<div class="empty">Run fm report publish.</div>`; });
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
