@@ -9,7 +9,7 @@ self.addEventListener("activate", (e) => {
 });
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (url.pathname.endsWith("/data/screen.json") || url.pathname.endsWith("/data/meta.json")) {
+  if (url.pathname.endsWith("/data/screen.json") || url.pathname.endsWith("/data/meta.json") || url.pathname.endsWith("/data/games.json")) {
     e.respondWith(
       fetch(e.request).then((r) => { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); return r; })
         .catch(() => caches.match(e.request))

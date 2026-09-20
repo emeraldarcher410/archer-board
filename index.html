@@ -83,7 +83,39 @@
   .verdict.strong { background: var(--good); color: #fff; }
   .verdict.lean { border: 2px solid var(--good); color: var(--ink); padding: 0 6px; }
   .why { color: var(--ink-2); font-size: 13px; margin-top: 6px; line-height: 1.35; }
+  .age { color: var(--ink-3); font-size: 12px; margin-left: 6px; }
+  .age.stale { color: var(--warn); font-weight: 600; }
+  .thin { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px dashed var(--ink-3); color: var(--ink-3); margin-left: 6px; }
+  .st { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-left: 6px; }
+  .st.q { background: var(--warn); color: #0b0b0b; }
+  .st.out { background: var(--critical); color: #fff; }
+  .outs { color: var(--ink-2); font-size: 12px; margin: 2px 0 6px; }
+  .outs b { color: var(--critical); }
   .tier { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; }
+  .tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .tab { flex: 1; min-height: 44px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+    border-radius: 12px; font-size: 15px; font-weight: 600; }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .hidden { display: none !important; }
+  .gcard { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .gcard summary { list-style: none; cursor: pointer; }
+  .gcard summary::-webkit-details-marker { display: none; }
+  .score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top: 6px; }
+  .score .tm { font-weight: 700; font-size: 18px; }
+  .score .tm.h { text-align: right; }
+  .score .pts { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+  .score .sub { color: var(--ink-3); font-size: 12px; text-align: center; grid-column: 1 / -1; }
+  .kick { color: var(--ink-3); font-size: 12px; }
+  .team-h { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 4px; }
+  .team-h b { font-size: 15px; }
+  .team-h span { color: var(--ink-3); font-size: 12px; }
+  table.pl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  table.pl th { text-align: right; color: var(--ink-3); font-weight: 500; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+  table.pl th:first-child, table.pl td:first-child { text-align: left; }
+  table.pl td { text-align: right; padding: 5px 4px; border-bottom: 1px solid var(--line); }
+  table.pl td:first-child { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  table.pl tr.pos td { color: var(--ink-3); font-size: 11px; text-transform: uppercase; padding-top: 8px; border-bottom: none; }
+  .note { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
   .empty { color: var(--ink-2); padding: 30px 0; text-align: center; }
   footer { color: var(--ink-3); font-size: 12px; margin-top: 18px; line-height: 1.5; }
 </style>
@@ -94,6 +126,11 @@
   <h1>Archer Board</h1>
   <div class="meta" id="meta">loading…</div>
 </header>
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-tab="props">Props</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="games">Games</button>
+</div>
+<section id="propsView">
 <input class="search" id="q" type="search" placeholder="Search player or team" autocomplete="off">
 <div class="filters" id="agreeFilters" role="group" aria-label="Minimum agreement">
   <button class="chip" data-agree="3" aria-pressed="false">All 3 agree</button>
@@ -103,6 +140,17 @@
 <div class="filters" id="marketFilters" role="group" aria-label="Market"></div>
 <div class="count" id="count"></div>
 <main id="list"></main>
+</section>
+<section id="gamesView" class="hidden">
+  <div class="filters" id="dayFilters" role="group" aria-label="Day">
+    <button class="chip" data-day="today" aria-pressed="false">Today</button>
+    <button class="chip" data-day="tomorrow" aria-pressed="false">Tomorrow</button>
+    <button class="chip" data-day="all" aria-pressed="true">All games</button>
+  </div>
+  <div class="count" id="gmeta"></div>
+  <main id="games"></main>
+  <div class="note">Score = the market's implied points (spread and total). Player lines = the matchup heuristic. Not reconciled: the team block shows QB attempts next to the sum of receiver targets so the gap is visible.</div>
+</section>
 <footer>
   <div><b>Book</b>: the reference book's devigged price at Underdog's line. <b>Form</b>: the player's last 8 games (baseline a). <b>Matchup</b>: form × opponent allowed rate × game script × environment (heuristic).</div>
   <div>Tier: <i>exact</i> same line · <i>bound</i> reference price is a floor · <i>approx</i> translated across the line gap. The tick on each meter is Underdog's breakeven.</div>
@@ -113,6 +161,9 @@
   const $ = (s) => document.querySelector(s);
   const state = { rows: [], meta: {}, agree: 2, market: "all", q: "" };
   const pct = (p) => p == null ? "—" : (p * 100).toFixed(0) + "%";
+  const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
+  const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m/60).toFixed(1)} h` : `${(m/1440).toFixed(1)} d`; };
+  const ageSpan = (d, label) => { const a = ageText(d); if (!a) return ""; const stale = (Date.now() - d.getTime()) > 3 * 3600 * 1000; return `<span class="age ${stale ? "stale" : ""}">${label} ${a} ago${stale ? " ⚠" : ""}</span>`; };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
   function meter(label, p, be) {
@@ -131,10 +182,10 @@
     const drivers = r.drivers ? esc(r.drivers) : "";
     return `<details class="card">
       <summary>
-        <div class="row"><span class="player">${esc(r.player_ref)}</span><span class="agree a${a}" aria-label="${a} of 3 agree">${a}/3</span></div>
+        <div class="row"><span class="player">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</span><span class="agree a${a}" aria-label="${a} of 3 agree">${a}/3</span></div>
         <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
-        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.ud_line}</b><span class="tier">${esc(r.tier)}</span></div>
-        ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}">${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
+        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.ud_line}</b><span class="tier">${esc(r.tier)}</span>${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.ref_last_update ? new Date(r.ref_last_update) : parseStamp(r.snapshot_ts), "book line")}</div>
+        ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}" ${r.verdict === "Out" ? 'style="background:var(--critical);color:#fff"' : ""}>${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
         <div class="meters">
           ${meter("Book", r.p_hit_at_ud_line, be)}
           ${meter("Form", r.p_naive, be)}
@@ -189,11 +240,75 @@
     .then((data) => {
       state.rows = data.rows || []; state.meta = data.meta || {};
       const asOf = (state.meta.as_of || "").replace(/T(\d\d)-(\d\d)-(\d\d)Z/, " $1:$2 UTC");
-      $("#meta").textContent = `Screen ${asOf} · ${state.rows.length} lines · vs ${state.meta.reference_book || "reference"}`;
+      const snapAge = ageText(parseStamp(state.meta.as_of));
+      $("#meta").innerHTML = `Screen ${esc(asOf)} · ${state.rows.length} lines · vs ${esc(state.meta.reference_book || "reference")}${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
       $("#stamp").textContent = `Exported ${state.meta.exported_at || ""}`;
       buildMarketChips(); render();
     })
     .catch(() => { $("#meta").textContent = "No screen published yet."; $("#list").innerHTML = `<div class="empty">Run fm report publish.</div>`; });
+
+  // ---- Games tab
+  const COLS = {
+    QB: [["pass_att","Att"],["pass_cmp","Cmp"],["pass_yds","Yds"],["pass_td","TD"],["int","INT"],["rush_yds","RuYd"]],
+    RB: [["rush_att","Car"],["rush_yds","RuYd"],["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]],
+    WR: [["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]],
+    TE: [["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]],
+  };
+  const fmt1 = (v) => v == null ? "—" : Number(v).toFixed(1);
+  function teamTable(name, blk) {
+    const groups = ["QB","RB","WR","TE"];
+    let html = `<div class="team-h"><b>${esc(name)}</b><span>implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)} vs targets ${fmt1(blk.targets_sum)}</span></div>`;
+    if (blk.qb_change) html += `<div class="outs"><b>QB change:</b> ${esc(blk.qb_change)} starts (starter ruled out) — pass-catcher lines carry extra uncertainty.</div>`;
+    if (blk.out && blk.out.length) html += `<div class="outs"><b>Out:</b> ${blk.out.map((o) => esc(o.player) + " (" + esc(o.pos) + (o.note ? ", " + esc(o.note) : "") + ")").join(", ")} — volume redistributed to teammates.</div>`;
+    for (const g of groups) {
+      const ps = (blk.players || []).filter((p) => p.pos === g);
+      if (!ps.length) continue;
+      const cols = COLS[g];
+      html += `<table class="pl"><thead><tr><th>${g}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
+      for (const p of ps) {
+        html += `<tr title="${esc(p.drivers || "")}"><td>${esc(p.player)}${p.status === "Q" ? '<span class="st q">Q</span>' : ""}${p.n_games < 5 ? `<span class="thin">${p.n_games} g</span>` : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    return html;
+  }
+  function gameCard(g) {
+    const h = g.teams[g.home] || {}, a = g.teams[g.away] || {};
+    const fav = g.spread_line == null ? "" : (g.spread_line > 0 ? `${g.home} -${g.spread_line}` : g.spread_line < 0 ? `${g.away} ${g.spread_line}` : "pick");
+    return `<details class="gcard"><summary>
+      <div class="kick">${esc(g.kickoff)} · Week ${g.week}</div>
+      <div class="score"><span class="tm">${esc(g.away)}</span><span class="pts">${fmt1(a.implied_points)} – ${fmt1(h.implied_points)}</span><span class="tm h">${esc(g.home)}</span>
+      <span class="sub">${fav ? esc(fav) + " · " : ""}total ${g.total_line ?? "—"}</span></div>
+    </summary>${teamTable(g.away, a)}${teamTable(g.home, h)}</details>`;
+  }
+  let gamesData = { games: [] }, dayFilter = "all";
+  const kickoffDate = (g) => (String(g.kickoff || "").match(/^\d{4}-\d{2}-\d{2}/) || [""])[0];
+  const localDate = (offsetDays) => { const d = new Date(); d.setDate(d.getDate() + offsetDays); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  function renderGames(data) {
+    gamesData = data;
+    let games = data.games || [];
+    if (dayFilter === "today") games = games.filter((g) => kickoffDate(g) === localDate(0));
+    if (dayFilter === "tomorrow") games = games.filter((g) => kickoffDate(g) === localDate(1));
+    const inj = data.meta && data.meta.injuries_out != null ? ` · ${data.meta.injuries_out} out, ${data.meta.injuries_q} questionable` : "";
+    $("#gmeta").textContent = (data.games || []).length ? `${games.length} of ${data.games.length} games · week ${data.meta?.week ?? ""}${inj}` : "No games published yet.";
+    $("#games").innerHTML = games.length ? games.map(gameCard).join("") : `<div class="empty">${(data.games || []).length ? "No games on that day." : "Run fm report publish."}</div>`;
+  }
+  $("#dayFilters").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-day]"); if (!b) return;
+    dayFilter = b.dataset.day;
+    $("#dayFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderGames(gamesData);
+  });
+  document.querySelector(".tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tab]"); if (!b) return;
+    document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    $("#propsView").classList.toggle("hidden", b.dataset.tab !== "props");
+    $("#gamesView").classList.toggle("hidden", b.dataset.tab !== "games");
+    try { localStorage.setItem("archer-tab", b.dataset.tab); } catch (_) {}
+  });
+  try { const t = localStorage.getItem("archer-tab"); if (t === "games") document.querySelector('[data-tab="games"]').click(); } catch (_) {}
+  fetch("./data/games.json?v=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then(renderGames)
+    .catch(() => renderGames({ games: [] }));
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 })();
