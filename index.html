@@ -310,7 +310,15 @@
   fetch("./data/games.json?v=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then(renderGames)
     .catch(() => renderGames({ games: [] }));
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    // When a newer worker takes over an already-open page, reload once so the new shell shows.
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (hadController) location.reload();
+      hadController = true;
+    });
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
+  }
 })();
 </script>
 </body>
