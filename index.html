@@ -78,6 +78,11 @@
   .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
   .detail dt { color: var(--ink-3); }
   .detail dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .verdict { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+    background: var(--surface-2); color: var(--ink-2); margin-right: 6px; }
+  .verdict.strong { background: var(--good); color: #fff; }
+  .verdict.lean { border: 2px solid var(--good); color: var(--ink); padding: 0 6px; }
+  .why { color: var(--ink-2); font-size: 13px; margin-top: 6px; line-height: 1.35; }
   .tier { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; }
   .empty { color: var(--ink-2); padding: 30px 0; text-align: center; }
   footer { color: var(--ink-3); font-size: 12px; margin-top: 18px; line-height: 1.5; }
@@ -129,6 +134,7 @@
         <div class="row"><span class="player">${esc(r.player_ref)}</span><span class="agree a${a}" aria-label="${a} of 3 agree">${a}/3</span></div>
         <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
         <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.ud_line}</b><span class="tier">${esc(r.tier)}</span></div>
+        ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}">${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
         <div class="meters">
           ${meter("Book", r.p_hit_at_ud_line, be)}
           ${meter("Form", r.p_naive, be)}
@@ -139,6 +145,7 @@
         <dt>Reference line</dt><dd>${r.ref_line ?? "—"} (${r.ref_over_price ?? "—"} / ${r.ref_under_price ?? "—"})</dd>
         <dt>Form mean</dt><dd>${r.form_mean ?? "—"}${r.n_games ? " over " + r.n_games + " games" : ""}${r.recent_hit_rate != null ? " · hit " + pct(r.recent_hit_rate) : ""}</dd>
         <dt>Projection</dt><dd>${r.proj_mean ?? "—"}${r.proj_sd ? " ± " + r.proj_sd : ""}</dd>
+        <dt>Why</dt><dd>${esc(r.why_long || "—")}</dd>
         <dt>Drivers</dt><dd>${drivers || "—"}</dd>
         <dt>Edge vs book</dt><dd>${r.edge != null ? (r.edge >= 0 ? "+" : "") + (r.edge*100).toFixed(1) + " pts" : "—"}</dd>
       </dl></div>
