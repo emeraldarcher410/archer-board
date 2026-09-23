@@ -118,10 +118,13 @@
   .note { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
   .empty { color: var(--ink-2); padding: 30px 0; text-align: center; }
   footer { color: var(--ink-3); font-size: 12px; margin-top: 18px; line-height: 1.5; }
+  .track { margin: 0 -16px; padding: 8px 16px; font-size: 12px; line-height: 1.45; color: var(--ink-2); background: var(--surface-2, rgba(127,127,127,.12)); border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); }
+  .track b { color: var(--ink); }
 </style>
 </head>
 <body>
 <div class="banner" role="status">UNVALIDATED — another book's price, a player's recent form and a matchup heuristic. Not the model. Bet small, log every entry.</div>
+<div class="track" id="track" hidden></div>
 <header>
   <h1>Archer Board</h1>
   <div class="meta" id="meta">loading…</div>
@@ -235,6 +238,22 @@
   });
   $("#q").addEventListener("input", (e) => { state.q = e.target.value; render(); });
 
+  fetch("./data/track.json?v=" + Date.now(), { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((t) => {
+      if (!t || !t.weeks || !t.weeks.length) return;
+      const el = document.getElementById("track");
+      const parts = t.weeks.slice(-4).map((w) => {
+        const rate = w.lean_n ? Math.round((100 * w.lean_hits) / w.lean_n) : null;
+        const b = w.brier || {};
+        const fmt = (x) => (x == null ? "–" : x.toFixed(3));
+        return `<b>Wk ${w.week}</b>: leans ${rate == null ? "–" : rate + "%"} of ${w.lean_n} · Brier form ${fmt(b.form)} / matchup ${fmt(b.matchup)} / book ${fmt(b.book)}`;
+      });
+      el.innerHTML = "Track record — " + parts.join(" &nbsp;|&nbsp; ") +
+        ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)}; a lean needs ${Math.round(100 * t.breakeven_p)}% to pay)`;
+      el.hidden = false;
+    })
+    .catch(() => {});
   fetch("./data/screen.json?v=" + Date.now(), { cache: "no-store" })
     .then((r) => r.json())
     .then((data) => {
