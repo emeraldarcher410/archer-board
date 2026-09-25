@@ -1,8 +1,8 @@
 // Network-first for everything on this origin: the board changes on every publish, and a
 // stale shell is worse than a slow one. The cache is only the offline fallback.
 // SHELL is stamped per publish by fm.reports.site.publish_site so old caches are purged.
-const SHELL = "archer-shell-20260925215815";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
+const SHELL = "archer-shell-20260925222544";
+const ASSETS = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

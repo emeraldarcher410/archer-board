@@ -25,9 +25,11 @@
     --gold: #F2C14E; --gold-soft: rgba(242,193,78,.14);
     --red: #F2545B; --red-soft: rgba(242,84,91,.14);
     --amber: #F59E0B; --amber-soft: rgba(245,158,11,.14);
+    --blue: #7CB4FB; --blue-soft: rgba(96,165,250,.14);
+    --violet: #A78BFA; --violet-soft: rgba(139,92,246,.10);
     --track: #1B2637;
     --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6);
-    --glass: rgba(7,11,18,.78);
+    --glass: rgba(7,11,18,.8);
     --radius: 18px;
     --display: "Barlow Condensed", "Inter", system-ui, sans-serif;
   }
@@ -42,19 +44,12 @@
       --gold: #B7791F; --gold-soft: rgba(183,121,31,.12);
       --red: #D63B43; --red-soft: rgba(214,59,67,.10);
       --amber: #B45309; --amber-soft: rgba(180,83,9,.10);
+      --blue: #2563EB; --blue-soft: rgba(37,99,235,.10);
+      --violet: #7C3AED; --violet-soft: rgba(124,58,237,.08);
       --track: #E8EDF4;
       --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25);
-      --glass: rgba(243,245,249,.85);
+      --glass: rgba(243,245,249,.86);
     }
-  }
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --bg: #F3F5F9; --bg-glow: #E4ECF7; --surface: #FFFFFF; --surface-2: #F3F6FA; --surface-3: #E8EDF4;
-    --line: #E1E7EF; --line-2: #CFD8E4; --ink: #0B1220; --ink-2: #46546A; --ink-3: #7A889C;
-    --accent: #059669; --accent-2: #10B981; --accent-soft: rgba(5,150,105,.10); --accent-ink: #FFFFFF;
-    --gold: #B7791F; --gold-soft: rgba(183,121,31,.12); --red: #D63B43; --red-soft: rgba(214,59,67,.10);
-    --amber: #B45309; --amber-soft: rgba(180,83,9,.10); --track: #E8EDF4;
-    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25); --glass: rgba(243,245,249,.85);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; }
@@ -64,112 +59,147 @@
     -webkit-font-smoothing: antialiased; min-height: 100vh;
     padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
+  body.locked { overflow: hidden; }
   button, input, select { font: inherit; color: inherit; }
   button { cursor: pointer; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
   .num { font-variant-numeric: tabular-nums; }
   .hidden { display: none !important; }
+  .view { animation: fade .22s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-  /* ---------- app bar ---------- */
+  /* app bar */
   .appbar { position: sticky; top: 0; z-index: 30; background: var(--glass); backdrop-filter: saturate(160%) blur(14px);
-    -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid var(--line);
-    padding-top: env(safe-area-inset-top); }
-  .appbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
-  .brand svg { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 6px 18px -8px rgba(16,185,129,.55); }
+    -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
+  .appbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); min-width: 0; }
+  .brand svg { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto; box-shadow: 0 6px 18px -8px rgba(16,185,129,.55); }
   .brand .wm { display: flex; flex-direction: column; line-height: 1; }
   .brand .wm b { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: .12em; }
   .brand .wm span { font-size: 10px; letter-spacing: .32em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; margin-top: 3px; }
+  .bar-r { display: flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; color: var(--ink-2); padding: 0; }
+  .icon-btn svg { width: 19px; height: 19px; }
   .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
-  .seg button { border: 0; background: transparent; padding: 7px 12px; border-radius: 9px; font-weight: 600; font-size: 13px; color: var(--ink-2); letter-spacing: .02em; }
+  .seg button { border: 0; background: transparent; padding: 7px 11px; border-radius: 9px; font-weight: 600; font-size: 13px; color: var(--ink-2); }
   .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 
-  /* ---------- status strip ---------- */
+  /* status */
   .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0 4px; font-size: 12px; color: var(--ink-2); }
   .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 500; white-space: nowrap; }
   .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .pill.stale .dot { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
   .pill.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 35%, transparent); background: var(--amber-soft); font-weight: 700; letter-spacing: .04em; }
   button.pill { cursor: pointer; }
+  .newboard { position: sticky; top: calc(64px + env(safe-area-inset-top)); z-index: 25; margin: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); border-radius: 14px; padding: 10px 14px; font-weight: 700; font-size: 14px; box-shadow: 0 10px 30px -12px rgba(16,185,129,.8); }
+  .newboard button { border: 0; background: rgba(0,0,0,.18); color: inherit; border-radius: 9px; padding: 6px 10px; font-weight: 800; }
 
-  /* ---------- page head ---------- */
+  /* headings */
   .page-h { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 14px 0 10px; }
-  .page-h h1 { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: .01em; margin: 0; line-height: 1; }
-  .page-h .sub { color: var(--ink-3); font-size: 13px; }
+  .page-h h1 { font-family: var(--display); font-weight: 700; font-size: 30px; margin: 0; line-height: 1; }
+  .page-h .sub { color: var(--ink-3); font-size: 13px; text-align: right; }
+  .sec-h { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 8px; }
+  .sec-h h2 { font-family: var(--display); font-size: 21px; margin: 0; letter-spacing: .01em; }
+  .sec-h span { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
 
-  /* ---------- KPI record ---------- */
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 12px; }
-  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 9px; box-shadow: var(--shadow); min-width: 0; }
-  .kpi b { display: block; font-family: var(--display); font-size: 22px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
-  .kpi span { display: block; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .kpi.good b { color: var(--accent-2); } .kpi.bad b { color: var(--red); }
-  .record { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); margin: 4px 0 10px; line-height: 1.5; }
-  .record b { color: var(--ink); }
+  /* top plays */
+  .tops { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 2px 16px 10px; scrollbar-width: none; }
+  .tops::-webkit-scrollbar { display: none; }
+  .top { flex: 0 0 78%; max-width: 320px; scroll-snap-align: start; border-radius: 18px; padding: 14px; position: relative; overflow: hidden; cursor: pointer;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--tc, #1f2937) 55%, var(--surface)), var(--surface) 70%); border: 1px solid color-mix(in srgb, var(--tc, #334155) 40%, var(--line)); box-shadow: var(--shadow); }
+  .top .rk { position: absolute; right: 12px; top: 8px; font-family: var(--display); font-size: 44px; font-weight: 800; opacity: .12; }
+  .top .who2 { display: flex; gap: 10px; align-items: center; }
+  .top .p { margin-top: 10px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .top .big { font-family: var(--display); font-size: 26px; font-weight: 700; }
+  .top .prob { font-family: var(--display); font-size: 26px; font-weight: 700; color: var(--accent-2); }
+  .top .foot2 { font-size: 11.5px; color: var(--ink-2); margin-top: 4px; }
+  .top .mk3 { font-size: 13px; font-family: Inter, system-ui, sans-serif; font-weight: 600; color: var(--ink-2); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); font-weight: 600; margin-top: 6px; }
+  .legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .top.empty2 { flex-basis: 100%; max-width: none; cursor: default; background: var(--surface); color: var(--ink-3); font-size: 13px; }
 
-  /* ---------- search + chips ---------- */
-  .search { position: relative; margin: 4px 0 8px; }
-  .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--ink-3); }
-  .search input { width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 0 14px 0 40px; font-size: 16px; outline: none; }
+  /* toolbar */
+  .toolbar { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }
+  .search { position: relative; flex: 1; }
+  .search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--ink-3); }
+  .search input { width: 100%; height: 44px; border-radius: 13px; border: 1px solid var(--line); background: var(--surface); padding: 0 12px 0 36px; font-size: 16px; outline: none; }
   .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-  .chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 8px; scrollbar-width: none; }
-  .chips::-webkit-scrollbar { display: none; }
-  .chips .lbl { flex: 0 0 auto; align-self: center; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; margin-right: 2px; }
+  .fbtn { height: 44px; border-radius: 13px; border: 1px solid var(--line); background: var(--surface); padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; color: var(--ink); white-space: nowrap; }
+  .fbtn svg { width: 17px; height: 17px; }
+  .fbtn .n { background: var(--accent); color: var(--accent-ink); border-radius: 8px; font-size: 11px; padding: 1px 6px; }
+  .applied { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 10px; }
+  .applied .chip { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; }
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .chip .sw { width: 8px; height: 8px; border-radius: 50%; }
-  .count { color: var(--ink-3); font-size: 12px; margin: 2px 0 10px; }
+  .count { color: var(--ink-3); font-size: 12px; margin: 2px 0 10px; display: flex; justify-content: space-between; }
+  .count button { border: 0; background: none; color: var(--accent-2); font-weight: 700; font-size: 12px; padding: 0; }
 
-  /* ---------- cards ---------- */
-  .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
-  .card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--tc, var(--line-2)); opacity: .9; }
-  .card > summary { list-style: none; cursor: pointer; padding: 14px 14px 12px 16px; }
-  .card > summary::-webkit-details-marker { display: none; }
-  .card[open] > summary { border-bottom: 1px solid var(--line); }
+  /* prop card */
+  .swipe { position: relative; margin-bottom: 12px; border-radius: var(--radius); }
+  .swipe .under { position: absolute; inset: 0; border-radius: var(--radius); display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-weight: 800; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+  .swipe .under .l { color: var(--accent-2); } .swipe .under .r { color: var(--ink-3); }
+  .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; touch-action: pan-y; transition: transform .22s ease, opacity .22s ease; padding: 14px 14px 12px 16px; cursor: pointer; }
+  .card.dragging { transition: none; }
+  .card.locked { opacity: .55; }
+  .card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--tc, var(--line-2)); }
   .ph { display: flex; gap: 12px; align-items: center; }
   .av { position: relative; flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%;
     background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--tc, #334155) 85%, white 15%), var(--tc, #334155) 70%);
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px color-mix(in srgb, var(--tc, #334155) 70%, transparent); }
-  .av img.face { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; display: block; }
+  .av.lg { width: 84px; height: 84px; }
+  .av.sm { width: 42px; height: 42px; }
+  .av img.face { position: relative; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; display: block; }
   .av .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 20px; color: #fff; letter-spacing: .03em; }
+  .av.lg .ini { font-size: 30px; } .av.sm .ini { font-size: 16px; }
   .av .badge { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; }
-  .av .badge img { width: 19px; height: 19px; object-fit: contain; }
+  .av.lg .badge { width: 32px; height: 32px; } .av .badge img { width: 78%; height: 78%; object-fit: contain; }
   .who { min-width: 0; flex: 1; }
-  .who .nm { font-weight: 700; font-size: 16.5px; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
-  .who .ctx { color: var(--ink-3); font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+  .who .nm { font-weight: 700; font-size: 16.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .who .ctx { color: var(--ink-3); font-size: 12.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
   .who .ctx img { width: 16px; height: 16px; object-fit: contain; }
+  .star { color: var(--gold); font-size: 14px; }
+  .when { font-weight: 700; } .when.soon { color: var(--amber); } .when.live { color: var(--red); }
   .st { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; letter-spacing: .04em; }
   .st.q { background: var(--amber-soft); color: var(--amber); } .st.out { background: var(--red); color: #fff; }
-  .signal { flex: 0 0 auto; text-align: right; }
-  .verdict { display: inline-block; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 8px; letter-spacing: .06em; text-transform: uppercase; background: var(--surface-3); color: var(--ink-2); }
+  .signal { flex: 0 0 auto; display: flex; flex-direction: column; align-items: end; gap: 6px; }
+  .quick { width: 34px; height: 34px; border-radius: 11px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--accent-2); font-size: 20px; font-weight: 700; line-height: 1; display: grid; place-items: center; padding: 0; }
+  .quick.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .verdict { display: inline-block; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 8px; letter-spacing: .06em; text-transform: uppercase; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; }
   .verdict.strong { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); }
   .verdict.lean { background: var(--accent-soft); color: var(--accent-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
   .verdict.split { background: var(--gold-soft); color: var(--gold); }
   .verdict.out { background: var(--red); color: #fff; }
-  .agree { display: block; margin-top: 5px; font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .verdict.fav { background: linear-gradient(135deg, #F2C14E, #F59E0B); color: #231500; }
   .pickrow { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; flex-wrap: wrap; }
   .mkt { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
   .line { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1; }
   .line .dir { font-size: 13px; font-family: Inter, sans-serif; font-weight: 800; padding: 3px 7px; border-radius: 7px; letter-spacing: .04em; align-self: center; }
-  .line .dir.o { background: var(--accent-soft); color: var(--accent-2); } .line .dir.u { background: rgba(96,165,250,.14); color: #7CB4FB; }
+  .line .dir.o { background: var(--accent-soft); color: var(--accent-2); } .line .dir.u { background: var(--blue-soft); color: var(--blue); }
+  .mv { font-size: 11.5px; font-weight: 700; border-radius: 7px; padding: 2px 7px; }
+  .mv.up { color: var(--accent-2); background: var(--accent-soft); } .mv.dn { color: var(--red); background: var(--red-soft); }
   .subrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
   .book { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 4px 9px; font-weight: 600; }
   .book b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .book .sw { width: 7px; height: 7px; border-radius: 50%; }
   .tag { display: inline-block; font-size: 11px; color: var(--ink-3); border: 1px dashed var(--line-2); border-radius: 7px; padding: 1px 7px; }
   .tag.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+  .tag.good { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
   .meters { display: grid; gap: 7px; margin-top: 12px; }
   .m { display: grid; grid-template-columns: 62px 1fr 42px 18px; align-items: center; gap: 10px; font-size: 12.5px; }
   .m .lb { color: var(--ink-2); font-weight: 500; }
   .m .v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   .m .ok { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 900; color: var(--ink-3); }
   .m .ok.y { background: var(--accent); color: var(--accent-ink); }
-  .bar { position: relative; height: 8px; border-radius: 99px; background: var(--track); overflow: visible; }
-  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--ink-3); opacity: .55; }
+  .bar { position: relative; height: 8px; border-radius: 99px; background: var(--track); }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--ink-3); opacity: .55; transform-origin: left; animation: grow .6s cubic-bezier(.2,.8,.2,1); }
   .bar i.y { background: linear-gradient(90deg, var(--accent), var(--accent-2)); opacity: 1; }
   .bar i.pff { background: linear-gradient(90deg, #6366F1, #A78BFA); opacity: .9; }
   .bar u { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 2px; background: var(--ink); opacity: .8; }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
   .why { margin-top: 11px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
-  .detail { padding: 12px 16px 14px; }
-  .detail h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
   ul.whys { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
   ul.whys li { position: relative; padding-left: 16px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
   ul.whys li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
@@ -180,62 +210,67 @@
   .btn.ghost { background: transparent; }
   .btn.small { min-height: 34px; padding: 0 11px; font-size: 13px; border-radius: 10px; }
   .btn.danger { color: var(--red); }
-  .btn:active { transform: translateY(1px); }
-  .empty { text-align: center; color: var(--ink-3); padding: 40px 12px; border: 1px dashed var(--line-2); border-radius: var(--radius); }
+  .btn.grow { flex: 1; }
+  .btn:active, .quick:active, .chip:active { transform: scale(.97); }
+  .empty { text-align: center; color: var(--ink-3); padding: 34px 12px; border: 1px dashed var(--line-2); border-radius: var(--radius); }
   .empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
-
-  /* skeleton */
   .sk { height: 150px; border-radius: var(--radius); margin-bottom: 12px; border: 1px solid var(--line);
     background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%); background-size: 300% 100%; animation: sh 1.4s infinite linear; }
   @keyframes sh { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
-  /* ---------- games ---------- */
+  /* games */
   .note-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; line-height: 1.5; }
   .note-card b { color: var(--ink); }
-  .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; box-shadow: var(--shadow); overflow: hidden; }
-  .gcard > summary { list-style: none; cursor: pointer; padding: 14px 16px 14px; }
-  .gcard > summary::-webkit-details-marker { display: none; }
-  .gtop { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-3); font-weight: 600; letter-spacing: .02em; }
+  .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; box-shadow: var(--shadow); overflow: hidden; padding: 14px 16px; cursor: pointer; }
+  .gtop { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-3); font-weight: 600; gap: 8px; }
   .gtop .mk { color: var(--ink-2); }
   .teams { display: grid; gap: 10px; margin: 12px 0 10px; }
   .trow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; }
   .trow img.lg { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
-  .trow .fb { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-weight: 800; color: #fff; font-size: 15px; background: var(--tc, #334155); }
+  .fb { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-weight: 800; color: #fff; font-size: 15px; background: var(--tc, #334155); }
   .trow .tn { font-weight: 700; font-size: 16px; line-height: 1.15; min-width: 0; }
   .trow .tn small { display: block; color: var(--ink-3); font-weight: 500; font-size: 12px; }
   .trow .pts { font-family: var(--display); font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
-  .trow .pts.win { color: var(--ink); } .trow .pts.lose { color: var(--ink-3); }
-  .wp { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--track); margin: 4px 0 4px; }
+  .trow .pts.lose { color: var(--ink-3); }
+  .wp { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--track); margin: 4px 0; }
   .wp span { display: block; height: 100%; }
   .wpl { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+  .glink { margin-top: 12px; font-size: 12.5px; color: var(--accent-2); font-weight: 700; display: flex; justify-content: space-between; }
   .lines { display: grid; grid-template-columns: 50px 1fr 1fr; gap: 7px; margin-top: 14px; align-items: stretch; }
   .lines .hd { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; align-self: center; }
   .lines .hd.c { text-align: center; }
   .cell { border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 7px 9px; font-variant-numeric: tabular-nums; }
-  .cell .top { display: flex; justify-content: space-between; gap: 4px; font-weight: 700; font-size: 14px; }
-  .cell .top .pr { color: var(--ink-2); font-weight: 600; }
+  .cell .top2 { display: flex; justify-content: space-between; gap: 4px; font-weight: 700; font-size: 14px; }
+  .cell .top2 .pr { color: var(--ink-2); font-weight: 600; }
   .cell .sub { color: var(--ink-3); font-size: 11.5px; margin-top: 2px; }
   .cell.pos { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); }
   .cell button { margin-top: 6px; width: 100%; min-height: 30px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--ink-2); }
   .mism { margin-top: 12px; display: grid; gap: 6px; }
-  .mism .h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #A78BFA; font-weight: 800; }
-  .mism div.i { font-size: 12.5px; color: var(--ink-2); background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.22); border-radius: 10px; padding: 7px 10px; }
-  .gdetail { padding: 4px 16px 14px; border-top: 1px solid var(--line); }
-  .team-h { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
+  .mism .h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--violet); font-weight: 800; }
+  .mism div.i { font-size: 12.5px; color: var(--ink-2); background: var(--violet-soft); border: 1px solid rgba(139,92,246,.25); border-radius: 10px; padding: 7px 10px; }
+  .battle { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .battle:last-child { border-bottom: 0; }
+  .battle .t { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; gap: 8px; }
+  .battle .t span:last-child { color: var(--ink-3); font-weight: 500; text-align: right; }
+  .tug { position: relative; height: 10px; border-radius: 99px; background: var(--track); margin: 7px 0 5px; overflow: hidden; }
+  .tug .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--ink-3); z-index: 1; }
+  .tug i { position: absolute; top: 0; bottom: 0; }
+  .battle .lg2 { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  .team-h { display: flex; align-items: center; gap: 10px; margin: 16px 0 6px; }
   .team-h img { width: 26px; height: 26px; object-fit: contain; }
   .team-h b { font-size: 15px; }
   .team-h span { color: var(--ink-3); font-size: 12px; margin-left: auto; text-align: right; }
   .outs { font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; } .outs b { color: var(--red); }
   table.pl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
-  table.pl th { text-align: right; color: var(--ink-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  table.pl th { text-align: right; color: var(--ink-3); font-weight: 600; font-size: 11px; text-transform: uppercase; padding: 6px 4px; border-bottom: 1px solid var(--line); }
   table.pl th:first-child, table.pl td:first-child { text-align: left; }
   table.pl td { text-align: right; padding: 7px 4px; border-bottom: 1px solid var(--line); }
   table.pl td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   table.pl td .mini { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; object-position: top; vertical-align: middle; margin-right: 6px; background: var(--surface-3); }
 
-  /* ---------- slip + bets ---------- */
+  /* slip + bets + record */
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 14px; }
-  .panel h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+  .panel h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); display: flex; justify-content: space-between; align-items: center; }
   .slip-leg { display: grid; grid-template-columns: 1fr 92px 36px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .slip-leg:last-child { border-bottom: 0; }
   .slip-leg .lbl { font-size: 14px; font-weight: 600; }
@@ -248,32 +283,107 @@
   .calc dt { color: var(--ink-2); } .calc dd { margin: 0; text-align: right; font-weight: 700; }
   .calc dt.h { grid-column: 1 / -1; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; font-weight: 800; }
   .calc dt.w { grid-column: 1 / -1; color: var(--amber); font-size: 12.5px; }
+  .entry { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); margin-bottom: 8px; }
+  .entry b { font-size: 14px; } .entry small { display: block; color: var(--ink-3); font-size: 12px; }
+  .entry .ev { font-family: var(--display); font-weight: 700; font-size: 22px; text-align: right; }
+  .entry .ev small { font-family: Inter, sans-serif; font-weight: 500; }
+  .entry .ev.pos { color: var(--accent-2); } .entry .ev.neg { color: var(--red); }
+  .entry.best { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .partner { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .partner:last-child { border-bottom: 0; }
+  .partner .who { font-size: 13.5px; } .partner .who small { display: block; color: var(--ink-3); font-size: 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 9px; box-shadow: var(--shadow); min-width: 0; }
+  .kpi b { display: block; font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .kpi span { display: block; color: var(--ink-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi.good b { color: var(--accent-2); } .kpi.bad b { color: var(--red); }
   .bet { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
-  .bet .top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
-  .bet .top b { font-size: 14.5px; }
-  .bet small { color: var(--ink-3); }
+  .bet .top3 { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+  .bet .top3 b { font-size: 14.5px; }
   .bst { font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 7px; text-transform: uppercase; letter-spacing: .06em; background: var(--surface-3); color: var(--ink-2); }
   .bst.won { background: var(--accent); color: var(--accent-ink); } .bst.lost { background: var(--red); color: #fff; }
   .meta2 { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; color: var(--ink-3); }
+  .res { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .res:last-child { border-bottom: 0; }
+  .res .mk2 { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 12px; }
+  .res .mk2.w { background: var(--accent); color: var(--accent-ink); } .res .mk2.l { background: var(--red-soft); color: var(--red); } .res .mk2.p { background: var(--surface-3); color: var(--ink-3); }
+  .res small { display: block; color: var(--ink-3); font-size: 12px; }
+  .res .act { font-family: var(--display); font-weight: 700; font-size: 18px; text-align: right; }
+  .res .act small { font-family: Inter, sans-serif; font-weight: 500; }
+  .dayh { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 2px; }
+  .cal { display: grid; gap: 8px; }
+  .cal .r { display: grid; grid-template-columns: 74px 1fr 70px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .cal .r span:last-child { text-align: right; color: var(--ink-3); }
+  .cal .b2 { position: relative; height: 16px; background: var(--track); border-radius: 6px; overflow: hidden; }
+  .cal .b2 i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 6px; transform-origin: left; animation: grow .6s ease; }
+  .cal .b2 u { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); }
+  .record { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); margin: 4px 0 10px; line-height: 1.5; }
+  .record b { color: var(--ink); }
   .foot { color: var(--ink-3); font-size: 12px; line-height: 1.6; margin: 18px 0 10px; }
   .foot b { color: var(--ink-2); }
 
-  /* ---------- bottom nav ---------- */
+  /* sheets */
+  .sheet { position: fixed; inset: 0; z-index: 70; background: rgba(2,6,12,.55); display: flex; align-items: flex-end; animation: dim .2s ease; }
+  @keyframes dim { from { background: rgba(2,6,12,0); } }
+  .sheet .in { width: 100%; max-width: 760px; margin: 0 auto; background: var(--bg); border-top-left-radius: 24px; border-top-right-radius: 24px; max-height: 94vh; overflow: auto; border-top: 1px solid var(--line-2);
+    padding: 8px 16px calc(24px + env(safe-area-inset-bottom)); animation: up .28s cubic-bezier(.2,.8,.2,1); overscroll-behavior: contain; }
+  .sheet.full .in { max-height: 100vh; height: 100vh; border-radius: 0; border-top: 0; padding-top: calc(4px + env(safe-area-inset-top)); }
+  @keyframes up { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); margin: 4px auto 6px; }
+  .sh-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 -16px 8px; position: sticky; top: -8px; background: var(--bg); padding: 8px 16px; z-index: 2; }
+  .sh-top h2 { font-family: var(--display); font-size: 24px; margin: 0; }
+  .sh-top .r { display: flex; gap: 8px; }
+  .sheet p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 8px 0; }
+  .sheet ol { color: var(--ink-2); font-size: 14px; line-height: 1.6; padding-left: 20px; }
+  .sheet code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; }
+  .fgrp { margin: 14px 0; } .fgrp h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+  .hero { border-radius: 20px; padding: 16px; margin-bottom: 14px; background: linear-gradient(150deg, color-mix(in srgb, var(--tc, #334155) 60%, var(--surface)), var(--surface) 75%); border: 1px solid color-mix(in srgb, var(--tc, #334155) 40%, var(--line)); }
+  .hero .h1 { display: flex; gap: 14px; align-items: center; }
+  .hero .nm2 { font-family: var(--display); font-size: 28px; font-weight: 700; line-height: 1.05; }
+  .hero .sub2 { color: var(--ink-2); font-size: 13px; margin-top: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .hero .sub2 img { width: 18px; height: 18px; object-fit: contain; }
+  .bigpick { display: flex; justify-content: space-between; align-items: end; margin-top: 14px; gap: 10px; }
+  .bigpick .l1 { font-size: 12px; color: var(--ink-2); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .bigpick .l2 { font-family: var(--display); font-size: 40px; font-weight: 800; line-height: 1; }
+  .bigpick .pr2 { text-align: right; }
+  .bigpick .pr2 b { font-family: var(--display); font-size: 40px; line-height: 1; color: var(--accent-2); display: block; }
+  .bigpick .pr2 span { font-size: 12px; color: var(--ink-2); }
+  .ghero { border-radius: 20px; padding: 16px; margin-bottom: 14px; background: linear-gradient(110deg, color-mix(in srgb, var(--ca, #334155) 55%, var(--surface)) 0%, var(--surface) 50%, color-mix(in srgb, var(--ch, #334155) 55%, var(--surface)) 100%); border: 1px solid var(--line-2); }
+  .ghero .vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; text-align: center; }
+  .ghero img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,.4)); }
+  .ghero .fb { width: 64px; height: 64px; margin: 0 auto; font-size: 20px; border-radius: 18px; }
+  .ghero .tnm { font-weight: 700; font-size: 14px; margin-top: 4px; }
+  .ghero .sc { font-family: var(--display); font-size: 40px; font-weight: 800; line-height: 1; }
+  .ghero .mid2 { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+  .chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart text { font-family: Inter, sans-serif; font-size: 11px; fill: var(--ink-3); }
+  .chart .lbl2 { font-weight: 700; fill: var(--ink-2); }
+  .glog { display: grid; margin-top: 10px; border-top: 1px solid var(--line); }
+  .gl { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: 8px; align-items: center; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .gl:last-child { border-bottom: 0; }
+  .gl .d { color: var(--ink-3); }
+  .gl .o { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .gl .o img { width: 18px; height: 18px; object-fit: contain; }
+  .gl .v { font-family: var(--display); font-weight: 700; font-size: 18px; text-align: right; min-width: 44px; }
+  .gl .v.y { color: var(--accent-2); } .gl .v.n { color: var(--red); }
+  .cmp { display: grid; gap: 6px; }
+  .cmp .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 13.5px; }
+  .cmp .r.me { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .cmp .r b { font-family: var(--display); font-size: 20px; }
+  .cmp .r small { color: var(--ink-3); }
+
+  /* bottom nav */
   .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--glass); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-  .tabbar .wrap { display: grid; grid-template-columns: repeat(4, 1fr); height: 64px; }
-  .tabbar button { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; letter-spacing: .02em; position: relative; }
+  .tabbar .wrap { display: grid; grid-template-columns: repeat(5, 1fr); height: 64px; padding: 0 6px; }
+  .tabbar button { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-3); font-size: 10.5px; font-weight: 600; position: relative; }
   .tabbar svg { width: 23px; height: 23px; }
   .tabbar button[aria-selected="true"] { color: var(--accent-2); }
   .tabbar button[aria-selected="true"]::after { content: ""; position: absolute; top: 0; width: 28px; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent-2); }
-  .tabbar .cnt { position: absolute; top: 8px; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 800; display: grid; place-items: center; }
-  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); max-width: 92vw; background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 60; box-shadow: 0 12px 30px -10px rgba(0,0,0,.6); }
-
-  /* info sheet */
-  .sheet { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.5); display: grid; align-items: end; }
-  .sheet .in { background: var(--surface); border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 18px 18px calc(22px + env(safe-area-inset-bottom)); max-height: 80vh; overflow: auto; border-top: 1px solid var(--line); }
-  .sheet h2 { font-family: var(--display); font-size: 24px; margin: 0 0 8px; }
-  .sheet p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 8px 0; }
-  @media (min-width: 720px) { .kpi b { font-size: 26px; } }
+  .tabbar .cnt { position: absolute; top: 8px; left: calc(50% + 7px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 800; display: grid; place-items: center; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); max-width: 92vw; background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 90; box-shadow: 0 12px 30px -10px rgba(0,0,0,.6); display: flex; align-items: center; gap: 10px; }
+  .toast button { border: 0; background: none; color: var(--accent); font-weight: 800; padding: 0; }
+  @media (min-width: 720px) { .kpi b { font-size: 26px; } .top { flex-basis: 300px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
@@ -298,80 +408,74 @@
       <svg viewBox="0 0 64 64"><use href="#mark"/></svg>
       <span class="wm"><b>ARCHER</b><span>Analytics</span></span>
     </a>
-    <div class="seg" id="leagueSeg" role="group" aria-label="League">
-      <button data-league="nfl" aria-pressed="true">NFL</button>
-      <button data-league="cfb" aria-pressed="false">College</button>
+    <div class="bar-r">
+      <div class="seg" id="leagueSeg" role="group" aria-label="League">
+        <button data-league="nfl" aria-pressed="true">NFL</button>
+        <button data-league="cfb" aria-pressed="false">NCAAF</button>
+      </div>
+      <button class="icon-btn" id="alertsBtn" aria-label="Alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></button>
     </div>
   </div>
 </header>
 
 <div class="wrap">
-  <div class="status" id="status">
-    <span class="pill"><span class="dot"></span><span id="meta">Loading board…</span></span>
-    <button class="pill warn" id="unval" type="button">UNVALIDATED · BET SMALL</button>
+  <div class="status">
+    <button class="pill" id="refreshPill" type="button"><span class="dot"></span><span id="meta">Loading board…</span></button>
+    <button class="pill warn" id="unval" type="button">UNVALIDATED ⓘ</button>
   </div>
+  <div class="newboard hidden" id="newBoard"><span>New board published</span><button type="button" id="reloadBtn">Refresh</button></div>
 
-  <!-- PROPS -->
-  <section id="propsView">
-    <div class="page-h"><h1>Props</h1><span class="sub" id="count"></span></div>
-    <div class="record hidden" id="record"></div>
-    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Search a player or team" autocomplete="off"></label>
-    <div class="chips" id="agreeFilters" role="group" aria-label="Signal">
-      <span class="lbl">Signal</span>
-      <button class="chip" data-agree="2" aria-pressed="false">Both clear</button>
-      <button class="chip" data-agree="1" aria-pressed="true">Either clears</button>
-      <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
+  <section id="propsView" class="view">
+    <div class="sec-h"><h2>Top plays</h2><span>pre-registered rule</span></div>
+    <div class="tops" id="tops"></div>
+    <div class="page-h" style="margin-top:6px"><h1>Props</h1><span class="sub" id="count"></span></div>
+    <div class="toolbar">
+      <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Player or team" autocomplete="off"></label>
+      <button class="fbtn" id="filterBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter<span class="n hidden" id="filterN"></span></button>
     </div>
-    <div class="chips" id="bookFilters" role="group" aria-label="App"></div>
-    <div class="chips" id="marketFilters" role="group" aria-label="Market"></div>
+    <div class="applied" id="applied"></div>
+    <div class="count"><span id="count2"></span><button id="unhide" class="hidden" type="button"></button></div>
     <main id="list"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
+    <div class="foot">Tap a card for the full breakdown · swipe right to add it to your slip · swipe left to hide it.</div>
   </section>
 
-  <!-- GAMES -->
-  <section id="gamesView" class="hidden">
+  <section id="gamesView" class="view hidden">
     <div class="page-h"><h1>Games</h1><span class="sub" id="gmeta"></span></div>
-    <div class="chips" id="dayFilters" role="group" aria-label="Day">
+    <div class="chips" id="dayFilters" role="group" aria-label="Day" style="margin-bottom:10px">
       <button class="chip" data-day="today" aria-pressed="false">Today</button>
       <button class="chip" data-day="tomorrow" aria-pressed="false">Tomorrow</button>
       <button class="chip" data-day="all" aria-pressed="true">All games</button>
     </div>
     <div class="note-card" id="modelNote"></div>
     <main id="games"><div class="sk"></div><div class="sk"></div></main>
-    <div class="foot">Model score comes from team ratings built on past results only — it never sees a betting line. Win and cover chances treat the final margin and total as bell curves with the spread measured in the backtest.</div>
+    <div class="foot">Model score comes from team ratings built on past results only — it never sees a betting line. Tap a game for its matchup page.</div>
   </section>
 
-  <!-- SLIP -->
-  <section id="slipView" class="hidden">
+  <section id="slipView" class="view hidden">
     <div class="page-h"><h1>Slip</h1><span class="sub">parlays &amp; pick'em entries</span></div>
+    <div class="panel"><h3><span>Legs</span><button class="btn small ghost danger" id="clearSlip" style="min-height:26px">Clear</button></h3><div id="slip"></div></div>
+    <div id="builder"></div>
     <div class="panel">
-      <h3>Legs</h3>
-      <div id="slip"></div>
-      <div class="field">Add a leg by hand
-        <input class="inp" id="manualLabel" placeholder="What is the bet? e.g. Chiefs ML">
-      </div>
-      <div class="row2">
-        <input class="inp" id="manualOdds" inputmode="numeric" placeholder="Odds, e.g. -110 or +150">
-        <button class="btn" id="addManual">Add leg</button>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>Math</h3>
-      <div class="field">Stake ($)<input class="inp" id="stake" inputmode="decimal" value="10"></div>
+      <h3>Sportsbook parlay</h3>
+      <div class="field" style="margin-top:0">Stake ($)<input class="inp" id="stake" inputmode="decimal" value="10"></div>
       <dl class="calc" id="calc"></dl>
       <div class="actions">
-        <button class="btn primary" id="trackParlay">Track as parlay / entry</button>
-        <button class="btn" id="trackSingles">Track each as a single</button>
-        <button class="btn ghost danger" id="clearSlip">Clear</button>
+        <button class="btn primary grow" id="trackParlay">Track parlay / entry</button>
+        <button class="btn" id="trackSingles">Track as singles</button>
       </div>
+    </div>
+    <div class="panel">
+      <h3>Add a leg by hand</h3>
+      <div class="field" style="margin-top:0"><input class="inp" id="manualLabel" placeholder="What is the bet? e.g. Chiefs ML"></div>
+      <div class="row2"><input class="inp" id="manualOdds" inputmode="numeric" placeholder="Odds, e.g. -110 or +150"><button class="btn" id="addManual">Add</button></div>
     </div>
   </section>
 
-  <!-- BETS -->
-  <section id="betsView" class="hidden">
+  <section id="betsView" class="view hidden">
     <div class="page-h"><h1>My bets</h1><span class="sub">graded automatically</span></div>
     <div class="kpis" id="betSummary"></div>
-    <div class="chips" id="betFilters" role="group" aria-label="Bet status">
+    <div class="chips" id="betFilters" role="group" aria-label="Bet status" style="margin-bottom:10px">
       <button class="chip" data-bets="open" aria-pressed="true">Open</button>
       <button class="chip" data-bets="settled" aria-pressed="false">Settled</button>
       <button class="chip" data-bets="all" aria-pressed="false">All</button>
@@ -382,7 +486,21 @@
       <label class="btn small">Import backup<input id="importBets" type="file" accept="application/json" hidden></label>
       <button class="btn small" id="exportCsv">Export CSV</button>
     </div>
-    <div class="foot">Bets are saved on this phone only — export a backup now and then. Open bets grade themselves when results publish, usually the morning after the game.</div>
+    <div class="foot">Bets live on this phone only — export a backup now and then. Open bets grade themselves when results publish, usually the morning after the game.</div>
+  </section>
+
+  <section id="recordView" class="view hidden">
+    <div class="page-h"><h1>How we did</h1><span class="sub" id="recSub"></span></div>
+    <div class="chips" id="recFilters" role="group" aria-label="Which picks" style="margin-bottom:10px">
+      <button class="chip" data-rec="fav" aria-pressed="true">Favorites</button>
+      <button class="chip" data-rec="both" aria-pressed="false">Both clear</button>
+      <button class="chip" data-rec="any" aria-pressed="false">Either clears</button>
+    </div>
+    <div class="kpis" id="recKpis"></div>
+    <div class="panel"><h3><span>Calibration</span><span style="text-transform:none;letter-spacing:0">does 60% hit 60%?</span></h3><div class="cal" id="cal"></div></div>
+    <div class="panel"><h3>Recent results</h3><div id="recList"></div></div>
+    <div class="record hidden" id="record"></div>
+    <div class="foot">Graded against box scores from about the last ten days; each side at its last board before kickoff. The weekly scorer on the server is the official record.</div>
   </section>
 
   <div class="foot" id="stamp"></div>
@@ -390,504 +508,13 @@
 
 <nav class="tabbar" role="tablist" aria-label="Sections">
   <div class="wrap">
-    <button role="tab" data-tab="props" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>Props</button>
+    <button role="tab" data-tab="props" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>Props</button>
     <button role="tab" data-tab="games" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9.5" ry="6" transform="rotate(-35 12 12)"/><path d="m9.5 14.5 5-5M11 11l2 2M9.8 12.2l2 2M12.2 9.8l2 2"/></svg>Games</button>
     <button role="tab" data-tab="slip" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Slip<span class="cnt hidden" id="slipCount"></span></button>
-    <button role="tab" data-tab="bets" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Bets</button>
+    <button role="tab" data-tab="bets" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Bets</button>
+    <button role="tab" data-tab="record" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Record</button>
   </div>
 </nav>
-
-<script>
-(function () {
-  const $ = (s) => document.querySelector(s);
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const pct = (p) => p == null ? "—" : (p * 100).toFixed(0) + "%";
-  const fmt1 = (v) => v == null ? "—" : Number(v).toFixed(1);
-  const odds = (x) => x == null ? "—" : (x > 0 ? "+" : "") + Math.round(x);
-  const store = {
-    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} },
-  };
-  const state = {
-    tab: "props", league: store.get("archer-league", "nfl"), agree: 1, market: "all", book: "all", q: "",
-    rows: [], meta: {}, games: {}, results: null, day: "all", betFilter: "open", assets: null,
-    slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
-  };
-  const toast = (msg) => { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1900); };
-  const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
-  const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m/60).toFixed(1)} h` : `${(m/1440).toFixed(1)} d`; };
-  const leagueOf = (r) => String(r.sport || "").endsWith("ncaaf") ? "cfb" : "nfl";
-  const normName = (n) => String(n || "").toLowerCase().replace(/\./g, " ").replace(/[^a-z ]/g, "").split(/\s+/).filter((t) => t && !["jr","sr","ii","iii","iv"].includes(t)).join(" ");
-  const STAT_OF = { player_pass_yds: "pass_yds", player_pass_tds: "pass_td", player_pass_completions: "pass_cmp", player_pass_attempts: "pass_att", player_pass_interceptions: "int", player_rush_yds: "rush_yds", player_rush_attempts: "rush_att", player_receptions: "rec", player_reception_yds: "rec_yds" };
-  const dec = (a) => a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
-  const toAmerican = (d) => d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
-  const implied = (a) => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
-  const APP = { prizepicks: "PrizePicks", underdog: "Underdog" };
-  const APP_DOT = { prizepicks: "#8B5CF6", underdog: "#FACC15", hardrockbet_fl: "#D4AF37", hardrockbet: "#D4AF37" };
-  const bookName = (b) => APP[b] || (String(b).startsWith("hardrock") ? "Hard Rock" : b);
-  const kickText = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); };
-
-  // ---------------------------------------------------------------- brand assets
-  function team(league, id) {
-    const a = state.assets && state.assets[league];
-    if (!a || !id) return null;
-    return a.teams[id] || a.teams[a.alias[id]] || null;
-  }
-  const initials = (n) => String(n || "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-  function avatar(name, league, teamId) {
-    const t = team(league, teamId);
-    const face = league === "nfl" && state.assets ? state.assets.players[normName(name)] : null;
-    const col = t && t.color ? t.color : "#334155";
-    return `<div class="av" style="--tc:${esc(col)}"><span class="ini">${esc(initials(name))}</span>${face ? `<img class="face" src="${esc(face)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:relative">` : ""}${t && t.logo ? `<span class="badge"><img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></span>` : ""}</div>`;
-  }
-  const logoImg = (league, id, cls) => { const t = team(league, id); return t && t.logo ? `<img class="${cls || ""}" src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""; };
-
-  // ---------------------------------------------------------------- Props
-  function meter(label, p, be, kind) {
-    if (p == null) return "";
-    const yes = p >= be;
-    return `<div class="m"><span class="lb">${label}</span>
-      <div class="bar" aria-hidden="true"><i class="${kind === "pff" ? "pff" : yes ? "y" : ""}" style="width:${Math.min(100, p * 100)}%"></i><u style="left:${be * 100}%"></u></div>
-      <span class="v">${pct(p)}</span><span class="ok ${yes ? "y" : ""}" title="${yes ? "clears" : "under"}">${yes ? "✓" : "·"}</span></div>`;
-  }
-  function propLeg(r) {
-    return {
-      id: `p|${r.book || "hardrockbet_fl"}|${r.event_id}|${r.player_ref}|${r.market}|${r.side}|${r.line}`, kind: "prop", league: leagueOf(r),
-      label: `${r.player_ref} ${r.market_label || r.market} ${r.side} ${r.line}`, sub: `${r.away_team || ""} @ ${r.home_team || ""}`,
-      name_key: normName(r.player_ref), stat: STAT_OF[r.market] || null, side: r.side, line: r.line,
-      price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10),
-      dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null,
-    };
-  }
-  function card(r, i) {
-    const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, a = r.agree_count ?? 0;
-    const over = r.side === "over";
-    const t = team(lg, r.form_team);
-    const opp = r.opponent ? `${logoImg(lg, r.opponent)}vs ${esc((team(lg, r.opponent) || {}).abbr || r.opponent)}` : esc(`${r.away_team || ""} @ ${r.home_team || ""}`);
-    const vcls = r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : r.verdict === "Split" ? "split" : r.verdict === "Out" ? "out" : "";
-    const whys = (r.why_points || []).map((w) => `<li class="${String(w).startsWith("PFF") ? "pff" : ""}">${esc(w)}</li>`).join("");
-    const price = r.dfs
-      ? `<span class="book"><span class="sw" style="width:7px;height:7px;border-radius:50%;background:${APP_DOT[r.book] || "#94A3B8"}"></span>${esc(bookName(r.book))} · needs <b>${pct(be)}</b></span>`
-      : `<span class="book"><span class="sw" style="width:7px;height:7px;border-radius:50%;background:${APP_DOT[r.book] || "#D4AF37"}"></span>Hard Rock <b>${odds(r.price)}</b></span>`;
-    const tags = [
-      r.dfs && r.best_line === false ? '<span class="tag warn">better line on another app</span>' : "",
-      r.dfs && r.best_line === true && r.other_lines ? '<span class="tag">best line</span>' : "",
-      r.n_games != null && r.n_games < 5 ? `<span class="tag">thin form · ${r.n_games} g</span>` : "",
-    ].join("");
-    return `<details class="card" style="--tc:${esc((t && t.color) || "var(--line-2)")}">
-      <summary>
-        <div class="ph">${avatar(r.player_ref, lg, r.form_team)}
-          <div class="who"><div class="nm">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</div>
-            <div class="ctx">${opp}${r.commence_time ? " · " + esc(kickText(r.commence_time)) : ""}</div></div>
-          <div class="signal">${r.verdict ? `<span class="verdict ${vcls}">${esc(r.verdict)}</span>` : ""}<span class="agree">${a}/2 clear</span></div>
-        </div>
-        <div class="pickrow"><span class="mkt">${esc(r.market_label || r.market)}</span>
-          <span class="line"><span class="dir ${over ? "o" : "u"}">${over ? "OVER" : "UNDER"}</span><span class="num">${r.line}</span></span></div>
-        <div class="subrow">${price}${tags}</div>
-        <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}${meter("PFF", r.p_pff, be, "pff")}</div>
-        ${r.why ? `<div class="why">${esc(r.why)}</div>` : ""}
-      </summary>
-      <div class="detail">
-        <h4>Why</h4>
-        <ul class="whys">${whys || `<li>${esc(r.why_long || "—")}</li>`}</ul>
-        <div class="actions">
-          <button class="btn small primary" data-add="${i}">+ Add to slip</button>
-          <button class="btn small" data-track="${i}">Track as single</button>
-        </div>
-      </div>
-    </details>`;
-  }
-  let shown = [];
-  function renderProps() {
-    const q = state.q.trim().toLowerCase();
-    let rows = state.rows.filter((r) => leagueOf(r) === state.league && (r.agree_count ?? 0) >= state.agree);
-    if (state.market !== "all") rows = rows.filter((r) => r.market === state.market);
-    if (state.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === state.book);
-    if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
-    rows.sort((x, y) => (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9));
-    shown = rows.slice(0, 250);
-    const total = state.rows.filter((r) => leagueOf(r) === state.league).length;
-    $("#count").textContent = `${rows.length} of ${total} lines${rows.length > 250 ? " · top 250" : ""}`;
-    $("#list").innerHTML = shown.length ? shown.map(card).join("")
-      : `<div class="empty"><b>${total ? "Nothing clears this filter" : "No props yet"}</b>${total ? "Loosen the signal filter, or check back after the next board." : "The next board publishes after the next line snapshot."}</div>`;
-  }
-  function chipGroup(el, label, key, items, current) {
-    el.innerHTML = items.length > 1 ? `<span class="lbl">${label}</span>` + items.map(([v, txt, dot]) =>
-      `<button class="chip" data-${key}="${esc(v)}" aria-pressed="${v === current}">${dot ? `<span class="sw" style="background:${dot}"></span>` : ""}${esc(txt)}</button>`).join("") : "";
-  }
-  function buildMarketChips() {
-    const rows = state.rows.filter((r) => leagueOf(r) === state.league);
-    const markets = [...new Set(rows.map((r) => r.market))];
-    const label = (m) => (rows.find((r) => r.market === m) || {}).market_label || m;
-    state.market = "all"; state.book = "all";
-    const books = [...new Set(rows.map((r) => r.book || "hardrockbet_fl"))];
-    chipGroup($("#bookFilters"), "App", "book", [["all", "All apps"]].concat(books.map((b) => [b, bookName(b), APP_DOT[b]])), "all");
-    chipGroup($("#marketFilters"), "Market", "market", [["all", "All markets"]].concat(markets.map((m) => [m, label(m)])), "all");
-  }
-  const press = (el, attr, b) => el.querySelectorAll(`button[data-${attr}]`).forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  $("#marketFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-market]"); if (!b) return; state.market = b.dataset.market; press($("#marketFilters"), "market", b); renderProps(); });
-  $("#bookFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-book]"); if (!b) return; state.book = b.dataset.book; press($("#bookFilters"), "book", b); renderProps(); });
-  $("#agreeFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-agree]"); if (!b) return; state.agree = Number(b.dataset.agree); press($("#agreeFilters"), "agree", b); renderProps(); });
-  $("#q").addEventListener("input", (e) => { state.q = e.target.value; renderProps(); });
-  $("#list").addEventListener("click", (e) => {
-    const a = e.target.closest("button[data-add]"), t = e.target.closest("button[data-track]");
-    if (a) { addLeg(propLeg(shown[Number(a.dataset.add)])); }
-    if (t) { trackSingle(propLeg(shown[Number(t.dataset.track)])); }
-  });
-
-  // ---------------------------------------------------------------- Games
-  const COLS = {
-    nfl: {
-      QB: [["pass_att","Att"],["pass_cmp","Cmp"],["pass_yds","Yds"],["pass_td","TD"],["int","INT"],["rush_yds","RuYd"]],
-      RB: [["rush_att","Car"],["rush_yds","RuYd"],["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]],
-      WR: [["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]], TE: [["targets","Tgt"],["rec","Rec"],["rec_yds","ReYd"]],
-    },
-    cfb: {
-      QB: [["pass_yds","Yds"],["pass_td","TD"],["int","INT"],["rush_att","Car"],["rush_yds","RuYd"]],
-      RB: [["rush_att","Car"],["rush_yds","RuYd"],["rush_td","TD"],["rec","Rec"],["rec_yds","ReYd"]],
-      WR: [["rec","Rec"],["rec_yds","ReYd"],["rec_td","TD"]], TE: [["rec","Rec"],["rec_yds","ReYd"],["rec_td","TD"]],
-    },
-  };
-  function teamTable(name, blk, league) {
-    if (!blk) return "";
-    const sub = league === "nfl"
-      ? `implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)}`
-      : `model ${fmt1(blk.model_points)} pts · recent ${fmt1(blk.recent_points)}`;
-    const t = team(league, name);
-    let html = `<div class="team-h">${logoImg(league, name)}<b>${esc((t && t.name) || name)}</b><span>${sub}</span></div>`;
-    if (blk.qb_change) html += `<div class="outs"><b>QB change:</b> ${esc(blk.qb_change)} starts (starter ruled out).</div>`;
-    if (blk.out && blk.out.length) html += `<div class="outs"><b>Out:</b> ${blk.out.map((o) => esc(o.player) + " (" + esc(o.pos) + ")").join(", ")} — volume redistributed.</div>`;
-    for (const g of ["QB","RB","WR","TE"]) {
-      const ps = (blk.players || []).filter((p) => p.pos === g);
-      if (!ps.length) continue;
-      const cols = COLS[league][g];
-      html += `<table class="pl"><thead><tr><th>${g}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
-      for (const p of ps) {
-        const face = league === "nfl" && state.assets ? state.assets.players[normName(p.player)] : null;
-        html += `<tr title="${esc(p.drivers || "")}"><td>${face ? `<img class="mini" src="${esc(face)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}${p.n_games < 5 ? ` <span class="tag">${p.n_games} g</span>` : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`;
-      }
-      html += `</tbody></table>`;
-    }
-    return html;
-  }
-  function gameLegs(g, league) {
-    const legs = [];
-    const date = String(g.kickoff_utc || "").slice(0, 10);
-    const base = { kind: "game", league, home: g.home, away: g.away, date, event: g.game_id };
-    const add = (key, label, short, side, line) => side && side.price != null && legs.push({ ...base, id: `g|${g.game_id}|${key}`, bet: key, label, short, line, price: side.price, p: side.p, edge: side.edge, be: side.breakeven });
-    if (g.spread) {
-      const hl = g.spread.home_line;
-      add("spread_home", `${g.home} ${hl > 0 ? "+" : ""}${hl}`, `${hl > 0 ? "+" : ""}${hl}`, g.spread.home, hl);
-      add("spread_away", `${g.away} ${-hl > 0 ? "+" : ""}${-hl}`, `${-hl > 0 ? "+" : ""}${-hl}`, g.spread.away, hl);
-    }
-    if (g.total) { add("over", `${g.away}/${g.home} over ${g.total.line}`, `O ${g.total.line}`, g.total.over, g.total.line); add("under", `${g.away}/${g.home} under ${g.total.line}`, `U ${g.total.line}`, g.total.under, g.total.line); }
-    if (g.moneyline) { add("ml_home", `${g.home} ML`, "ML", g.moneyline.home, null); add("ml_away", `${g.away} ML`, "ML", g.moneyline.away, null); }
-    return legs;
-  }
-  let gameLegIndex = [];
-  function lineCell(leg, flagged) {
-    if (!leg) return `<div class="cell"><div class="sub">no line</div></div>`;
-    const pos = leg.edge != null && leg.edge > 0;
-    gameLegIndex.push(leg);
-    return `<div class="cell ${pos && flagged ? "pos" : ""}"><div class="top"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div>
-      <div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>
-      <button data-gleg="${gameLegIndex.length - 1}">+ Slip</button></div>`;
-  }
-  function trow(league, id, pts, win, sub) {
-    const t = team(league, id);
-    const logo = t && t.logo ? `<img class="lg" src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.outerHTML='<span class=&quot;fb&quot; style=&quot;--tc:${esc((t && t.color) || "#334155")}&quot;>${esc(((t && t.abbr) || id || "").slice(0, 4))}</span>'">` : `<span class="fb" style="--tc:${esc((t && t.color) || "#334155")}">${esc(((t && t.abbr) || id || "").slice(0, 4))}</span>`;
-    return `<div class="trow">${logo}<div class="tn">${esc((t && t.name) || id)}<small>${esc(sub || (t && t.nick) || "")}</small></div><div class="pts ${pts == null ? "" : win ? "win" : "lose"}">${pts == null ? "" : fmt1(pts)}</div></div>`;
-  }
-  function gameCard(g, league) {
-    const flags = (state.games.meta?.game_model?.[league]?.flags) || {};
-    const legs = gameLegs(g, league), by = Object.fromEntries(legs.map((l) => [l.bet, l]));
-    const m = g.model;
-    const kick = g.kickoff_utc ? kickText(g.kickoff_utc) : (g.kickoff || "");
-    const market = g.spread_line != null ? `${g.spread_line > 0 ? g.home + " −" + g.spread_line : g.spread_line < 0 ? g.away + " " + g.spread_line : "Pick"} · O/U ${g.total_line ?? "—"}` : "";
-    const ta = team(league, g.away), th = team(league, g.home);
-    const wpH = m && m.home_win_p != null ? m.home_win_p : null;
-    const wp = wpH != null ? `<div class="wp"><span style="width:${(1 - wpH) * 100}%;background:${esc((ta && ta.color) || "#64748B")}"></span><span style="width:${wpH * 100}%;background:${esc((th && th.color) || "#94A3B8")}"></span></div>
-      <div class="wpl"><span>${esc((ta && ta.abbr) || g.away)} ${pct(1 - wpH)}</span><span>model win chance</span><span>${pct(wpH)} ${esc((th && th.abbr) || g.home)}</span></div>` : "";
-    const lines = m && (g.spread || g.total || g.moneyline) ? `<div class="lines">
-        <div></div><div class="hd c">${esc((ta && ta.abbr) || g.away)}</div><div class="hd c">${esc((th && th.abbr) || g.home)}</div>
-        <div class="hd">Spread</div>${lineCell(by.spread_away, flags.ats)}${lineCell(by.spread_home, flags.ats)}
-        <div class="hd">Total</div>${lineCell(by.over, flags.totals)}${lineCell(by.under, flags.totals)}
-        <div class="hd">Money</div>${lineCell(by.ml_away, flags.ats)}${lineCell(by.ml_home, flags.ats)}
-      </div>` : (m ? `<div class="sub" style="font-size:12px;color:var(--ink-3);margin-top:8px">Hard Rock has not posted lines for this game.</div>` : "");
-    const mism = (g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : "";
-    const teams = g.teams || {};
-    const hasDetail = teams[g.away] || teams[g.home];
-    return `<details class="gcard"><summary>
-      <div class="gtop"><span>${esc(kick)}${g.week ? " · Week " + g.week : ""}</span><span class="mk">${esc(market)}</span></div>
-      <div class="teams">${trow(league, g.away, m ? m.away : null, m && m.away > m.home, "Away")}${trow(league, g.home, m ? m.home : null, m && m.home >= m.away, "Home")}</div>
-      ${wp}${lines}${mism}
-      ${hasDetail ? `<div class="sub" style="margin-top:12px;font-size:12px;color:var(--accent-2);font-weight:700">Player projections ›</div>` : ""}
-    </summary>${hasDetail ? `<div class="gdetail">${teamTable(g.away, teams[g.away], league)}${teamTable(g.home, teams[g.home], league)}</div>` : ""}</details>`;
-  }
-  const localDate = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toDateString(); };
-  const gameDate = (g) => { const k = g.kickoff_utc ? new Date(g.kickoff_utc) : g.kickoff ? new Date(String(g.kickoff).slice(0, 10) + "T12:00:00") : null; return k && !isNaN(k) ? k.toDateString() : ""; };
-  function renderGames() {
-    const league = state.league;
-    const all = (league === "cfb" ? state.games.cfb_games : state.games.games) || [];
-    let games = all;
-    if (state.day === "today") games = games.filter((g) => gameDate(g) === localDate(0));
-    if (state.day === "tomorrow") games = games.filter((g) => gameDate(g) === localDate(1));
-    const gm = state.games.meta?.game_model?.[league];
-    const bt = gm?.backtest, row = bt?.ats?.find((r) => r.min_diff === 3), tot = bt?.totals?.find((r) => r.min_diff === 3);
-    const flagged = gm?.flags?.ats || gm?.flags?.totals;
-    $("#modelNote").innerHTML = bt
-      ? `<b>${league === "cfb" ? "College" : "NFL"} game model, 2023–25 backtest:</b> sides ${row ? (row.win_rate * 100).toFixed(1) + "% (" + row.wins + "–" + row.losses + ")" : "—"}, totals ${tot ? (tot.win_rate * 100).toFixed(1) + "% (" + tot.wins + "–" + tot.losses + ")" : "—"} when it disagreed with the closing line by 3+ points; 52.4% breaks even. ${flagged ? "Green cells are backed by that record." : "<b>No edge found — scores are information only.</b>"}`
-      : `<b>${league === "cfb" ? "College" : "NFL"} game model not backtested yet</b> — treat every number as information only.`;
-    if (gm?.book && gm.book !== "hardrockbet_fl") $("#modelNote").innerHTML += ` <b>Lines: Hard Rock national feed</b> — check the price in your app before betting.`;
-    gameLegIndex = [];
-    games = games.slice().sort((a, b) => String(a.kickoff_utc || a.kickoff).localeCompare(String(b.kickoff_utc || b.kickoff)));
-    $("#gmeta").textContent = all.length ? `${games.length} of ${all.length}` : "";
-    $("#games").innerHTML = games.length ? games.map((g) => gameCard(g, league)).join("")
-      : `<div class="empty"><b>${all.length ? "No games that day" : "No games yet"}</b>${all.length ? "Try All games." : "Games publish with the next board."}</div>`;
-  }
-  $("#games").addEventListener("click", (e) => { const b = e.target.closest("button[data-gleg]"); if (!b) return; e.preventDefault(); addLeg(gameLegIndex[Number(b.dataset.gleg)]); });
-  $("#dayFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-day]"); if (!b) return; state.day = b.dataset.day; press($("#dayFilters"), "day", b); renderGames(); });
-
-  // ---------------------------------------------------------------- Slip (parlay calculator)
-  function saveSlip() { store.set("archer-slip-v1", state.slip); const c = $("#slipCount"); c.textContent = state.slip.length || ""; c.classList.toggle("hidden", !state.slip.length); }
-  function addLeg(leg) {
-    if (!leg) return;
-    if (state.slip.some((l) => l.id === leg.id)) { toast("Already on the slip"); return; }
-    state.slip.push(leg); saveSlip(); renderSlip(); toast(`Added · ${leg.label}`);
-  }
-  function renderSlip() {
-    const legs = state.slip;
-    $("#slip").innerHTML = legs.length ? legs.map((l, i) => `<div class="slip-leg"><div class="lbl">${esc(l.label)}<small>${esc(l.dfs ? l.app + " pick" : l.sub || (l.kind === "game" ? l.away + " @ " + l.home : l.kind))}${l.p != null ? " · model " + pct(l.p) : ""}</small></div>
-      ${l.dfs ? '<span class="tag">pick\'em</span>' : `<input class="inp" inputmode="numeric" value="${l.price ?? ""}" data-odds="${i}" aria-label="Odds">`}<button class="btn small danger" data-rm="${i}" aria-label="Remove">✕</button></div>`).join("")
-      : `<div class="empty" style="padding:22px 10px"><b>Your slip is empty</b>Tap “+ Add to slip” on a prop or a game line, or add a leg by hand.</div>`;
-    const stake = Math.max(0, Number($("#stake").value) || 0);
-    // Pick'em legs pay by the app's entry multiplier, not by odds: show the chance they all
-    // hit and the smallest multiplier that makes the entry worth playing.
-    const picks = legs.filter((l) => l.dfs);
-    const pickP = picks.length && picks.every((l) => l.p != null) ? picks.reduce((a, l) => a * l.p, 1) : null;
-    const pickEvents = picks.map((l) => l.event).filter(Boolean);
-    const pickHtml = picks.length ? `<dt class="h">Pick'em entry · ${picks.length} pick${picks.length > 1 ? "s" : ""}</dt>
-      <dt>Model's chance all hit</dt><dd>${pickP == null ? "—" : (pickP * 100).toFixed(1) + "%"}</dd>
-      <dt>Worth it if the app pays more than</dt><dd>${pickP ? (1 / pickP).toFixed(1) + "x" : "—"}</dd>
-      ${pickEvents.length !== new Set(pickEvents).size ? `<dt class="w">Two picks are in the same game, so their results are linked; the real chance differs from multiplying them.</dt>` : ""}` : "";
-    const valid = legs.filter((l) => !l.dfs && Number.isFinite(Number(l.price)) && Math.abs(Number(l.price)) >= 100);
-    if (!valid.length) { $("#calc").innerHTML = pickHtml; return; }
-    const D = valid.reduce((a, l) => a * dec(Number(l.price)), 1);
-    const bookP = valid.reduce((a, l) => a * implied(Number(l.price)), 1);
-    const known = valid.every((l) => l.p != null);
-    const modelP = known ? valid.reduce((a, l) => a * l.p, 1) : null;
-    const events = valid.map((l) => l.event).filter(Boolean);
-    const sameGame = events.length !== new Set(events).size;
-    const ev = modelP != null ? modelP * (D - 1) * stake - (1 - modelP) * stake : null;
-    $("#calc").innerHTML = `<dt class="h">Sportsbook parlay · ${valid.length} leg${valid.length > 1 ? "s" : ""}</dt>
-      <dt>Parlay odds</dt><dd>${odds(toAmerican(D))} (${D.toFixed(2)}x)</dd>
-      <dt>Pays on $${stake.toFixed(2)}</dt><dd>$${(stake * D).toFixed(2)}</dd>
-      <dt>Needs to hit</dt><dd>${pct(1 / D)}</dd>
-      <dt>Book's chance (with vig)</dt><dd>${(bookP * 100).toFixed(1)}%</dd>
-      <dt>Model's chance</dt><dd>${modelP == null ? "—" : (modelP * 100).toFixed(1) + "%"}</dd>
-      <dt>Expected profit</dt><dd style="color:${ev == null ? "inherit" : ev >= 0 ? "var(--accent-2)" : "var(--red)"}">${ev == null ? "—" : (ev >= 0 ? "+$" : "−$") + Math.abs(ev).toFixed(2)}</dd>
-      ${sameGame ? `<dt class="w">Two or more legs are in the same game. Their results are linked, and books price same-game parlays with extra margin.</dt>` : ""}${pickHtml}`;
-  }
-  $("#slip").addEventListener("click", (e) => { const b = e.target.closest("button[data-rm]"); if (!b) return; state.slip.splice(Number(b.dataset.rm), 1); saveSlip(); renderSlip(); });
-  $("#slip").addEventListener("input", (e) => { const i = e.target.dataset.odds; if (i == null) return; state.slip[Number(i)].price = Number(e.target.value); saveSlip(); renderSlip(); });
-  $("#stake").addEventListener("input", renderSlip);
-  $("#addManual").addEventListener("click", () => {
-    const label = $("#manualLabel").value.trim(), price = Number($("#manualOdds").value);
-    if (!label || !Number.isFinite(price) || Math.abs(price) < 100) { toast("Enter a description and odds like -110 or +150"); return; }
-    addLeg({ id: "m|" + Date.now(), kind: "manual", label, price, p: null });
-    $("#manualLabel").value = ""; $("#manualOdds").value = "";
-  });
-  $("#clearSlip").addEventListener("click", () => { state.slip = []; saveSlip(); renderSlip(); });
-
-  // ---------------------------------------------------------------- Bet tracker
-  function saveBets() { store.set("archer-bets-v1", state.bets); }
-  function newBet(legs, stake, mult) {
-    const D = mult || legs.reduce((a, l) => a * dec(Number(l.price)), 1);
-    return { id: "b" + Date.now() + Math.random().toString(36).slice(2, 6), placed: new Date().toISOString(), stake, legs: legs.map((l) => ({ ...l, result: null })), odds: toAmerican(D), status: "open", manual: false };
-  }
-  function trackSingle(leg) {
-    if (leg.dfs) { addLeg(leg); toast("Pick'em: add your picks to the slip, then track the entry with its multiplier"); return; }
-    const stake = Math.max(0, Number($("#stake").value) || 10);
-    state.bets.unshift(newBet([leg], stake)); saveBets(); renderBets(); toast(`Tracking $${stake} on ${leg.label}`);
-  }
-  $("#trackParlay").addEventListener("click", () => {
-    const legs = state.slip.filter((l) => !l.dfs && Math.abs(Number(l.price)) >= 100);
-    const picks = state.slip.filter((l) => l.dfs);
-    if (picks.length && !legs.length) {
-      const m = Number(prompt(`Pick'em entry, ${picks.length} picks: what does it pay if all hit? (e.g. 3 for 3x)`, picks.length === 2 ? "3" : ""));
-      if (!(m > 1)) { toast("Enter the payout multiplier, like 3 or 6"); return; }
-      state.bets.unshift(newBet(picks, Math.max(0, Number($("#stake").value) || 0), m));
-      state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); toast("Pick'em entry tracked");
-      return;
-    }
-    if (picks.length) { toast("Track pick'em picks and sportsbook legs separately"); return; }
-    if (!legs.length) { toast("The slip is empty"); return; }
-    state.bets.unshift(newBet(legs, Math.max(0, Number($("#stake").value) || 0)));
-    state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); toast("Parlay tracked");
-  });
-  $("#trackSingles").addEventListener("click", () => {
-    const legs = state.slip.filter((l) => Math.abs(Number(l.price)) >= 100);
-    if (!legs.length) { toast("The slip is empty"); return; }
-    const stake = Math.max(0, Number($("#stake").value) || 0);
-    legs.forEach((l) => state.bets.unshift(newBet([l], stake)));
-    state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); toast(`${legs.length} singles tracked`);
-  });
-  const dayDiff = (a, b) => Math.abs((new Date(a + "T00:00:00Z") - new Date(b + "T00:00:00Z")) / 86400000);
-  function gradeLeg(l, res) {
-    if (!res || !l.date) return null;
-    if (l.kind === "prop" && l.stat) {
-      const row = res.players.find((p) => p.league === l.league && p.name_key === l.name_key && dayDiff(p.date, l.date) <= 1);
-      if (!row) return null;
-      const v = row.stats[l.stat];
-      if (v == null) return "void";
-      if (v === l.line) return "push";
-      return (l.side === "over" ? v > l.line : v < l.line) ? "won" : "lost";
-    }
-    if (l.kind === "game") {
-      const g = res.games.find((x) => x.league === l.league && x.home === l.home && x.away === l.away && dayDiff(x.date, l.date) <= 1);
-      if (!g) return null;
-      const margin = g.home_score - g.away_score, total = g.home_score + g.away_score;
-      let r;
-      if (l.bet === "spread_home") r = margin + l.line;
-      else if (l.bet === "spread_away") r = -(margin + l.line);
-      else if (l.bet === "over") r = total - l.line;
-      else if (l.bet === "under") r = l.line - total;
-      else if (l.bet === "ml_home") r = margin;
-      else if (l.bet === "ml_away") r = -margin;
-      return r > 0 ? "won" : r < 0 ? "lost" : "push";
-    }
-    return null;
-  }
-  function settle(b) {
-    if (b.manual) return;
-    for (const l of b.legs) { if (!l.result) l.result = gradeLeg(l, state.results); }
-    const rs = b.legs.map((l) => l.result);
-    if (rs.includes("lost")) b.status = "lost";
-    else if (rs.every((r) => r === "won" || r === "push" || r === "void")) b.status = rs.every((r) => r === "push" || r === "void") ? "push" : "won";
-    else b.status = "open";
-  }
-  function payout(b) {
-    if (b.status === "lost") return 0;
-    if (b.status === "push" || b.status === "void") return b.stake;
-    const live = b.legs.filter((l) => l.result !== "push" && l.result !== "void");
-    if (b.legs.some((l) => l.dfs)) return b.stake * dec(Number(b.odds));
-    return b.stake * live.reduce((a, l) => a * dec(Number(l.price)), 1);
-  }
-  function toWin(b) { return b.legs.some((l) => l.dfs) ? b.stake * (dec(Number(b.odds)) - 1) : b.stake * (b.legs.reduce((a, x) => a * dec(Number(x.price)), 1) - 1); }
-  function renderBets() {
-    state.bets.forEach(settle); saveBets();
-    const settled = state.bets.filter((b) => b.status !== "open");
-    const staked = settled.reduce((a, b) => a + b.stake, 0), back = settled.reduce((a, b) => a + payout(b), 0);
-    const w = settled.filter((b) => b.status === "won").length, l = settled.filter((b) => b.status === "lost").length, p = settled.length - w - l;
-    const openStake = state.bets.filter((b) => b.status === "open").reduce((a, b) => a + b.stake, 0);
-    const profit = back - staked;
-    $("#betSummary").innerHTML = `<div class="kpi"><b>${w}–${l}${p ? "–" + p : ""}</b><span>Record</span></div>
-      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${(profit >= 0 ? "+$" : "−$") + Math.abs(profit).toFixed(0)}</b><span>Profit</span></div>
-      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${staked ? ((profit) / staked * 100).toFixed(1) + "%" : "—"}</b><span>ROI</span></div>
-      <div class="kpi"><b>$${openStake.toFixed(0)}</b><span>Open</span></div>`;
-    let list = state.bets;
-    if (state.betFilter === "open") list = list.filter((b) => b.status === "open");
-    if (state.betFilter === "settled") list = list.filter((b) => b.status !== "open");
-    $("#bets").innerHTML = list.length ? list.map((b) => `<div class="bet">
-      <div class="top"><b>${b.legs.length > 1 ? (b.legs.some((x) => x.dfs) ? b.legs.length + "-pick entry" : b.legs.length + "-leg parlay") : esc(b.legs[0].label)}</b><span class="bst ${b.status}">${b.status}</span></div>
-      ${b.legs.length > 1 ? `<ul class="whys" style="margin-top:8px">${b.legs.map((x) => `<li>${esc(x.label)} ${x.dfs ? "" : odds(x.price)}${x.result ? " — " + x.result : ""}</li>`).join("")}</ul>` : `<div class="meta2"><span>${esc(b.legs[0].sub || "")}</span></div>`}
-      <div class="meta2"><span>$${b.stake.toFixed(2)} at ${odds(b.odds)} · ${new Date(b.placed).toLocaleDateString()}</span><span>${b.status === "open" ? "to win $" + toWin(b).toFixed(2) : "returned $" + payout(b).toFixed(2)}</span></div>
-      <div class="actions"><button class="btn small" data-mark="won" data-bet="${b.id}">Won</button><button class="btn small" data-mark="lost" data-bet="${b.id}">Lost</button><button class="btn small" data-mark="push" data-bet="${b.id}">Push</button><button class="btn small" data-mark="auto" data-bet="${b.id}">Auto</button><button class="btn small ghost danger" data-del="${b.id}">Delete</button></div>
-    </div>`).join("") : `<div class="empty"><b>${state.bets.length ? "Nothing here" : "No bets tracked yet"}</b>${state.bets.length ? "" : "Track a single from a prop card, or a parlay from the Slip."}</div>`;
-  }
-  $("#bets").addEventListener("click", (e) => {
-    const m = e.target.closest("button[data-mark]"), d = e.target.closest("button[data-del]");
-    if (m) {
-      const b = state.bets.find((x) => x.id === m.dataset.bet); if (!b) return;
-      if (m.dataset.mark === "auto") { b.manual = false; b.legs.forEach((x) => { x.result = null; }); }
-      else { b.manual = true; b.status = m.dataset.mark; }
-      saveBets(); renderBets();
-    }
-    if (d && confirm("Delete this bet?")) { state.bets = state.bets.filter((x) => x.id !== d.dataset.del); saveBets(); renderBets(); }
-  });
-  $("#betFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-bets]"); if (!b) return; state.betFilter = b.dataset.bets; press($("#betFilters"), "bets", b); renderBets(); });
-  const download = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
-  $("#exportBets").addEventListener("click", () => download(`archer-bets-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(state.bets, null, 1), "application/json"));
-  $("#exportCsv").addEventListener("click", () => {
-    const q = (x) => `"${String(x ?? "").replace(/"/g, '""')}"`;
-    const lines = [["placed","legs","odds","stake","status","returned"].join(",")].concat(state.bets.map((b) => [b.placed, q(b.legs.map((l) => `${l.label} ${l.dfs ? "" : odds(l.price)}`).join(" | ")), b.odds, b.stake, b.status, b.status === "open" ? "" : payout(b).toFixed(2)].join(",")));
-    download("archer-bets.csv", lines.join("\n"), "text/csv");
-  });
-  $("#importBets").addEventListener("change", async (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    try { const got = JSON.parse(await f.text()); if (!Array.isArray(got)) throw 0; const ids = new Set(state.bets.map((b) => b.id)); got.forEach((b) => { if (b && b.id && !ids.has(b.id)) state.bets.push(b); }); saveBets(); renderBets(); toast(`Imported ${got.length} bets`); }
-    catch (_) { toast("That file is not an Archer backup"); }
-  });
-
-  // ---------------------------------------------------------------- about sheet
-  $("#unval").addEventListener("click", () => {
-    const s = document.createElement("div"); s.className = "sheet";
-    s.innerHTML = `<div class="in" role="dialog" aria-label="How to read this board"><h2>How to read this board</h2>
-      <p><b>Unvalidated.</b> These are heuristics, not the finished model. Each is pulled toward the market by how often it has been right, so a pick only shows as clearing when it disagrees with the market strongly. Bet small.</p>
-      <p><b>The tick</b> on each bar is what the bet must hit to break even: Hard Rock's price, or your pick'em entry's per-pick rate.</p>
-      <p><b>Fair</b> is the market's own view with the vig removed (for pick'em, the sportsbooks' price at that line). It is context, never a vote.</p>
-      <p><b>Form</b> is the player's recent games. <b>Matchup</b> adds the opponent, game script and scoring environment. <b>PFF</b> is the unit matchup — coverage, pass rush vs line, run blocking vs run defense — graded weekly before it earns a vote.</p>
-      <p style="color:var(--ink-3);font-size:12px">Team names, logos and player photos belong to their owners and are shown for reference only.</p>
-      <div class="actions"><button class="btn primary" style="width:100%">Got it</button></div></div>`;
-    s.addEventListener("click", (e) => { if (e.target === s || e.target.closest("button")) s.remove(); });
-    document.body.appendChild(s);
-  });
-
-  // ---------------------------------------------------------------- tabs, league, data
-  function show(tab) {
-    state.tab = tab;
-    document.querySelectorAll(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === tab)));
-    for (const v of ["props", "games", "slip", "bets"]) $(`#${v}View`).classList.toggle("hidden", tab !== v);
-    $("#leagueSeg").style.visibility = tab === "props" || tab === "games" ? "visible" : "hidden";
-    store.set("archer-tab", tab);
-    if (tab === "slip") renderSlip();
-    if (tab === "bets") renderBets();
-    window.scrollTo({ top: 0 });
-  }
-  document.querySelector(".tabbar").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) show(b.dataset.tab); });
-  function setLeague(lg) {
-    state.league = lg; store.set("archer-league", lg);
-    $("#leagueSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
-    buildMarketChips(); renderProps(); renderGames();
-  }
-  $("#leagueSeg").addEventListener("click", (e) => { const b = e.target.closest("button[data-league]"); if (b) setLeague(b.dataset.league); });
-
-  const get = (f) => fetch(`./data/${f}?v=${Date.now()}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  const assetsReady = get("assets.json").then((a) => { state.assets = a; });
-  get("track.json").then((t) => {
-    if (!t || !t.weeks || !t.weeks.length) return;
-    const parts = t.weeks.slice(-4).map((w) => {
-      const rate = w.lean_n ? Math.round((100 * w.lean_hits) / w.lean_n) : null;
-      const b = w.brier || {}; const f = (x) => (x == null ? "–" : x.toFixed(3));
-      return `<b>Wk ${w.week}</b> leans ${rate == null ? "–" : rate + "%"} of ${w.lean_n} · Brier form ${f(b.form)} / matchup ${f(b.matchup)} / book ${f(b.book)}`;
-    });
-    $("#record").innerHTML = "<b>Track record</b> · " + parts.join(" &nbsp;·&nbsp; ") + ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)})`;
-    $("#record").classList.remove("hidden");
-  });
-  Promise.all([get("screen.json"), assetsReady]).then(([data]) => {
-    if (!data) { $("#meta").textContent = "No board published yet"; $("#list").innerHTML = `<div class="empty"><b>No board yet</b>It publishes after the next line snapshot.</div>`; return; }
-    state.rows = data.rows || []; state.meta = data.meta || {};
-    const d = parseStamp(state.meta.as_of), age = ageText(d);
-    const stale = d && (Date.now() - d.getTime()) > 6 * 3600 * 1000;
-    $("#meta").textContent = age ? `Lines ${age} old` : "Board loaded";
-    $("#meta").parentNode.classList.toggle("stale", !!stale);
-    $("#stamp").textContent = `Board ${state.meta.as_of || ""} · exported ${state.meta.exported_at || ""}`;
-    buildMarketChips(); renderProps();
-  });
-  Promise.all([get("games.json"), assetsReady]).then(([g]) => { state.games = g || {}; renderGames(); });
-  get("results.json").then((r) => { state.results = r; if (r) { state.bets.forEach(settle); saveBets(); if (state.tab === "bets") renderBets(); } });
-
-  $("#leagueSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === state.league)));
-  saveSlip();
-  const saved = store.get("archer-tab", "props");
-  show(["props", "games", "slip", "bets"].includes(saved) ? saved : "props");
-
-  if ("serviceWorker" in navigator) {
-    let hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) location.reload(); hadController = true; });
-    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
-  }
-})();
-</script>
+<script src="./app.js" defer></script>
 </body>
 </html>
