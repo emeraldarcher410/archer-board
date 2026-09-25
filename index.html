@@ -297,7 +297,7 @@
         <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
         <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.line}</b>${r.dfs ? `<span class="price">${esc(APP[r.book] || r.book)} · needs ${pct(be)}</span>${r.best_line === false ? '<span class="thin">better line elsewhere</span>' : ""}` : `<span class="price">${odds(r.price)}</span>`}${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.book_last_update ? new Date(r.book_last_update) : parseStamp(r.snapshot_ts), "line")}</div>
         ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}" ${r.verdict === "Out" ? 'style="background:var(--critical);color:#fff"' : ""}>${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
-        <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}</div>
+        <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}${r.p_pff != null ? meter("PFF", r.p_pff, be) : ""}</div>
       </summary>
       <div class="detail">
         <b>Why</b>
@@ -433,6 +433,7 @@
     return `<details class="gcard"><summary>
       <div class="kick">${esc(kick)}${g.week ? " · Week " + g.week : ""}${market ? " · " + esc(market) : ""}</div>
       ${header}${lines}
+      ${(g.mismatches || []).length ? `<div class="note"><b>PFF unit matchups</b> (unvalidated)</div><ul class="whys mism">${g.mismatches.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     </summary>${teamTable(g.away, teams[g.away], league)}${teamTable(g.home, teams[g.home], league)}</details>`;
   }
   const localDate = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toDateString(); };
