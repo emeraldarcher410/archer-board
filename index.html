@@ -160,7 +160,7 @@
 </style>
 </head>
 <body>
-<div class="banner" role="status">UNVALIDATED — Hard Rock lines with form and matchup heuristics, shrunk by how often they have been right. Not the model. Bet small.</div>
+<div class="banner" role="status">UNVALIDATED — Hard Rock, PrizePicks and Underdog lines with form and matchup heuristics, shrunk by how often they have been right. Not the model. Bet small.</div>
 <div class="record" id="record" hidden></div>
 <header>
   <h1>Archer Board</h1>
@@ -183,6 +183,7 @@
     <button class="chip" data-agree="1" aria-pressed="true">Either clears</button>
     <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
   </div>
+  <div class="filters" id="bookFilters" role="group" aria-label="App"></div>
   <div class="filters" id="marketFilters" role="group" aria-label="Market"></div>
   <div class="count" id="count"></div>
   <main id="list"></main>
@@ -251,7 +252,7 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} },
   };
   const state = {
-    tab: "props", league: store.get("archer-league", "nfl"), agree: 1, market: "all", q: "",
+    tab: "props", league: store.get("archer-league", "nfl"), agree: 1, market: "all", book: "all", q: "",
     rows: [], meta: {}, games: {}, results: null, day: "all", betFilter: "open",
     slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
   };
@@ -276,7 +277,7 @@
   }
   function propLeg(r) {
     return {
-      id: `p|${r.event_id}|${r.player_ref}|${r.market}|${r.side}|${r.line}`, kind: "prop", league: leagueOf(r),
+      id: `p|${r.book || "hardrockbet_fl"}|${r.event_id}|${r.player_ref}|${r.market}|${r.side}|${r.line}`, kind: "prop", league: leagueOf(r),
       label: `${r.player_ref} ${r.market_label || r.market} ${r.side} ${r.line}`, sub: `${r.away_team || ""} @ ${r.home_team || ""}`,
       name_key: normName(r.player_ref), stat: STAT_OF[r.market] || null, side: r.side, line: r.line,
       price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10),
@@ -313,18 +314,24 @@
     const q = state.q.trim().toLowerCase();
     let rows = state.rows.filter((r) => leagueOf(r) === state.league && (r.agree_count ?? 0) >= state.agree);
     if (state.market !== "all") rows = rows.filter((r) => r.market === state.market);
+    if (state.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === state.book);
     if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent].some((v) => String(v ?? "").toLowerCase().includes(q)));
     rows.sort((x, y) => (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9));
     shown = rows.slice(0, 300);
     const total = state.rows.filter((r) => leagueOf(r) === state.league).length;
     $("#count").textContent = `${rows.length} of ${total} ${state.league === "cfb" ? "college" : "NFL"} lines${rows.length > 300 ? " (first 300 shown)" : ""}`;
-    $("#list").innerHTML = shown.length ? shown.map(card).join("") : `<div class="empty">${total ? "Nothing clears the filter. Loosen it, or wait for a fresh board." : "No Hard Rock props published for this league yet."}</div>`;
+    $("#list").innerHTML = shown.length ? shown.map(card).join("") : `<div class="empty">${total ? "Nothing clears the filter. Loosen it, or wait for a fresh board." : "No props published for this league yet."}</div>`;
   }
   function buildMarketChips() {
     const rows = state.rows.filter((r) => leagueOf(r) === state.league);
     const markets = [...new Set(rows.map((r) => r.market))];
     const label = (m) => (rows.find((r) => r.market === m) || {}).market_label || m;
     state.market = "all";
+    state.book = "all";
+    const books = [...new Set(rows.map((r) => r.book || "hardrockbet_fl"))];
+    const bookName = (b) => APP[b] || (b.startsWith("hardrock") ? "Hard Rock" : b);
+    $("#bookFilters").innerHTML = books.length > 1 ? [`<button class="chip" data-book="all" aria-pressed="true">All apps</button>`]
+      .concat(books.map((b) => `<button class="chip" data-book="${esc(b)}" aria-pressed="false">${esc(bookName(b))}</button>`)).join("") : "";
     $("#marketFilters").innerHTML = [`<button class="chip" data-market="all" aria-pressed="true">All markets</button>`]
       .concat(markets.map((m) => `<button class="chip" data-market="${esc(m)}" aria-pressed="false">${esc(label(m))}</button>`)).join("");
   }
@@ -332,6 +339,12 @@
     const b = e.target.closest("button[data-market]"); if (!b) return;
     state.market = b.dataset.market;
     $("#marketFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderProps();
+  });
+  $("#bookFilters").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-book]"); if (!b) return;
+    state.book = b.dataset.book;
+    $("#bookFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     renderProps();
   });
   $("#agreeFilters").addEventListener("click", (e) => {
@@ -658,7 +671,7 @@
     state.rows = data.rows || []; state.meta = data.meta || {};
     const asOf = (state.meta.as_of || "").replace(/T(\d\d)-(\d\d)-(\d\d)Z/, " $1:$2 UTC");
     const snapAge = ageText(parseStamp(state.meta.as_of));
-    $("#meta").innerHTML = `Board ${esc(asOf)} · Hard Rock${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
+    $("#meta").innerHTML = `Board ${esc(asOf)} · Hard Rock, PrizePicks, Underdog${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
     $("#stamp").textContent = `Exported ${state.meta.exported_at || ""}`;
     buildMarketChips(); renderProps();
   });
