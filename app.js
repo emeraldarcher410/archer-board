@@ -123,6 +123,7 @@
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over";
     const w = when(r.commence_time);
     const tags = [
+      r.injury_note ? `<span class="tag good">▲ ${esc(String(r.injury_note).split(";")[0].replace(/^\+/, "+"))}</span>` : "",
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line on another app</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
