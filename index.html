@@ -3,243 +3,400 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Archer Board</title>
-<meta name="description" content="Unvalidated cross-book screen, baseline form and matchup heuristic. Not the model.">
+<title>Archer Analytics</title>
+<meta name="description" content="Archer Analytics: NFL and college props and games with form, matchup and PFF views. Unvalidated heuristics; bet small.">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#1a1a19">
+<meta name="theme-color" content="#070B12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   :root {
-    color-scheme: light;
-    --surface: #fcfcfb; --surface-2: #f0efec; --line: #dcdbd6;
-    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #7a7973;
-    --accent: #2a78d6; --good: #0ca30c; --warn: #fab219; --critical: #d03b3b;
-    --meter-track: #e6e5e0;
+    color-scheme: dark;
+    --bg: #070B12; --bg-glow: #0E1A2E;
+    --surface: #0E1520; --surface-2: #141D2B; --surface-3: #1B2637;
+    --line: #1F2B3E; --line-2: #2A3950;
+    --ink: #EAF0F7; --ink-2: #A5B3C6; --ink-3: #6C7C93;
+    --accent: #10B981; --accent-2: #34D399; --accent-soft: rgba(16,185,129,.14); --accent-ink: #03140D;
+    --gold: #F2C14E; --gold-soft: rgba(242,193,78,.14);
+    --red: #F2545B; --red-soft: rgba(242,84,91,.14);
+    --amber: #F59E0B; --amber-soft: rgba(245,158,11,.14);
+    --track: #1B2637;
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6);
+    --glass: rgba(7,11,18,.78);
+    --radius: 18px;
+    --display: "Barlow Condensed", "Inter", system-ui, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --surface: #1a1a19; --surface-2: #242423; --line: #383835;
-      --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8f8e86;
-      --accent: #3987e5; --meter-track: #2f2f2d;
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #F3F5F9; --bg-glow: #E4ECF7;
+      --surface: #FFFFFF; --surface-2: #F3F6FA; --surface-3: #E8EDF4;
+      --line: #E1E7EF; --line-2: #CFD8E4;
+      --ink: #0B1220; --ink-2: #46546A; --ink-3: #7A889C;
+      --accent: #059669; --accent-2: #10B981; --accent-soft: rgba(5,150,105,.10); --accent-ink: #FFFFFF;
+      --gold: #B7791F; --gold-soft: rgba(183,121,31,.12);
+      --red: #D63B43; --red-soft: rgba(214,59,67,.10);
+      --amber: #B45309; --amber-soft: rgba(180,83,9,.10);
+      --track: #E8EDF4;
+      --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25);
+      --glass: rgba(243,245,249,.85);
     }
   }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --surface: #1a1a19; --surface-2: #242423; --line: #383835;
-    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8f8e86;
-    --accent: #3987e5; --meter-track: #2f2f2d;
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #F3F5F9; --bg-glow: #E4ECF7; --surface: #FFFFFF; --surface-2: #F3F6FA; --surface-3: #E8EDF4;
+    --line: #E1E7EF; --line-2: #CFD8E4; --ink: #0B1220; --ink-2: #46546A; --ink-3: #7A889C;
+    --accent: #059669; --accent-2: #10B981; --accent-soft: rgba(5,150,105,.10); --accent-ink: #FFFFFF;
+    --gold: #B7791F; --gold-soft: rgba(183,121,31,.12); --red: #D63B43; --red-soft: rgba(214,59,67,.10);
+    --amber: #B45309; --amber-soft: rgba(180,83,9,.10); --track: #E8EDF4;
+    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25); --glass: rgba(243,245,249,.85);
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--surface); color: var(--ink);
-    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    -webkit-text-size-adjust: 100%; }
-  body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
-  .banner { position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 10px 16px;
-    background: var(--warn); color: #0b0b0b; font-weight: 600; font-size: 13px; }
-  header { padding: 14px 0 6px; }
-  h1 { font-size: 20px; margin: 0 0 2px; }
-  .meta { color: var(--ink-2); font-size: 13px; }
-  .filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin: 0 -16px; padding-left: 16px;
-    scrollbar-width: none; }
-  .filters::-webkit-scrollbar { display: none; }
-  .chip { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
-    border-radius: 999px; padding: 8px 14px; font-size: 14px; min-height: 40px; }
-  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .search { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px;
-    background: var(--surface-2); color: var(--ink); font-size: 16px; margin: 4px 0 10px; }
-  .count { color: var(--ink-3); font-size: 13px; margin-bottom: 8px; }
-  .card { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
-    background: var(--surface); }
-  .card summary { list-style: none; cursor: pointer; }
-  .card summary::-webkit-details-marker { display: none; }
-  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .player { font-weight: 650; font-size: 16px; }
-  .game { color: var(--ink-3); font-size: 12px; }
-  .pick { font-size: 15px; margin-top: 2px; }
-  .pick b { font-variant-numeric: tabular-nums; }
-  .agree { flex: 0 0 auto; border-radius: 8px; padding: 3px 8px; font-size: 12px; font-weight: 700;
-    background: var(--surface-2); color: var(--ink-2); }
-  .agree.a2 { background: var(--good); color: #fff; }
-  .agree.a1 { border: 2px solid var(--good); color: var(--ink); }
-  .price { margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
-  .meters { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
-  .m { display: grid; grid-template-columns: 58px 1fr 52px 60px; align-items: center; gap: 8px; font-size: 13px; }
-  .m .lbl { color: var(--ink-2); }
-  .m .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
-  .m .ok { font-size: 12px; color: var(--ink-2); }
-  .m .ok.yes { color: var(--good); font-weight: 700; }
-  .track { position: relative; height: 10px; background: var(--meter-track); border-radius: 0 5px 5px 0; overflow: visible; }
-  .fill { height: 100%; background: var(--accent); border-radius: 0 5px 5px 0; }
-  .be { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--ink-3); }
-  .detail { margin-top: 10px; color: var(--ink-2); font-size: 13px; border-top: 1px solid var(--line); padding-top: 8px; }
-  .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
-  .detail dt { color: var(--ink-3); }
-  .detail dd { margin: 0; font-variant-numeric: tabular-nums; }
-  .verdict { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
-    background: var(--surface-2); color: var(--ink-2); margin-right: 6px; }
-  .verdict.strong { background: var(--good); color: #fff; }
-  .verdict.lean { border: 2px solid var(--good); color: var(--ink); padding: 0 6px; }
-  .why { color: var(--ink-2); font-size: 13px; margin-top: 6px; line-height: 1.35; }
-  .age { color: var(--ink-3); font-size: 12px; margin-left: 6px; }
-  .age.stale { color: var(--warn); font-weight: 600; }
-  .thin { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px dashed var(--ink-3); color: var(--ink-3); margin-left: 6px; }
-  .st { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-left: 6px; }
-  .st.q { background: var(--warn); color: #0b0b0b; }
-  .st.out { background: var(--critical); color: #fff; }
-  .outs { color: var(--ink-2); font-size: 12px; margin: 2px 0 6px; }
-  .outs b { color: var(--critical); }
-  .tier { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; }
-  .tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
-  .tab { flex: 1; min-height: 44px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
-    border-radius: 12px; font-size: 15px; font-weight: 600; }
-  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(1200px 520px at 50% -180px, var(--bg-glow), transparent 70%) no-repeat, var(--bg);
+    color: var(--ink); font: 15px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+  .num { font-variant-numeric: tabular-nums; }
   .hidden { display: none !important; }
-  .gcard { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
-  .gcard summary { list-style: none; cursor: pointer; }
-  .gcard summary::-webkit-details-marker { display: none; }
-  .score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top: 6px; }
-  .score .tm { font-weight: 700; font-size: 18px; }
-  .score .tm.h { text-align: right; }
-  .score .pts { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
-  .score .sub { color: var(--ink-3); font-size: 12px; text-align: center; grid-column: 1 / -1; }
-  .kick { color: var(--ink-3); font-size: 12px; }
-  .team-h { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 4px; }
-  .team-h b { font-size: 15px; }
-  .team-h span { color: var(--ink-3); font-size: 12px; }
-  table.pl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  table.pl th { text-align: right; color: var(--ink-3); font-weight: 500; padding: 4px 4px; border-bottom: 1px solid var(--line); }
-  table.pl th:first-child, table.pl td:first-child { text-align: left; }
-  table.pl td { text-align: right; padding: 5px 4px; border-bottom: 1px solid var(--line); }
-  table.pl td:first-child { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  table.pl tr.pos td { color: var(--ink-3); font-size: 11px; text-transform: uppercase; padding-top: 8px; border-bottom: none; }
-  .note { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
-  .empty { color: var(--ink-2); padding: 30px 0; text-align: center; }
-  footer { color: var(--ink-3); font-size: 12px; margin-top: 18px; line-height: 1.5; }
-  .record { margin: 0 -16px; padding: 8px 16px; font-size: 12px; line-height: 1.45; color: var(--ink-2); background: var(--surface-2); border-bottom: 1px solid var(--line); }
+
+  /* ---------- app bar ---------- */
+  .appbar { position: sticky; top: 0; z-index: 30; background: var(--glass); backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid var(--line);
+    padding-top: env(safe-area-inset-top); }
+  .appbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+  .brand svg { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 6px 18px -8px rgba(16,185,129,.55); }
+  .brand .wm { display: flex; flex-direction: column; line-height: 1; }
+  .brand .wm b { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: .12em; }
+  .brand .wm span { font-size: 10px; letter-spacing: .32em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; margin-top: 3px; }
+  .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; padding: 7px 12px; border-radius: 9px; font-weight: 600; font-size: 13px; color: var(--ink-2); letter-spacing: .02em; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+
+  /* ---------- status strip ---------- */
+  .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0 4px; font-size: 12px; color: var(--ink-2); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 500; white-space: nowrap; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pill.stale .dot { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .pill.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 35%, transparent); background: var(--amber-soft); font-weight: 700; letter-spacing: .04em; }
+  button.pill { cursor: pointer; }
+
+  /* ---------- page head ---------- */
+  .page-h { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 14px 0 10px; }
+  .page-h h1 { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: .01em; margin: 0; line-height: 1; }
+  .page-h .sub { color: var(--ink-3); font-size: 13px; }
+
+  /* ---------- KPI record ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 9px; box-shadow: var(--shadow); min-width: 0; }
+  .kpi b { display: block; font-family: var(--display); font-size: 22px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .kpi span { display: block; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi.good b { color: var(--accent-2); } .kpi.bad b { color: var(--red); }
+  .record { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); margin: 4px 0 10px; line-height: 1.5; }
   .record b { color: var(--ink); }
-  .btn { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 10px; padding: 8px 12px; font-size: 14px; min-height: 40px; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  .btn.small { min-height: 32px; padding: 4px 10px; font-size: 13px; }
-  .btn.danger { color: var(--critical); }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-  ul.whys { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; line-height: 1.45; }
-  ul.whys li { margin-bottom: 4px; }
-  .lines { display: grid; grid-template-columns: 64px 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 13px; }
-  .lines .hd { color: var(--ink-3); font-size: 12px; }
-  .cell { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font-variant-numeric: tabular-nums; }
-  .cell .top { display: flex; justify-content: space-between; gap: 4px; font-weight: 600; }
-  .cell .sub { color: var(--ink-3); font-size: 12px; }
-  .cell.pos { border-color: var(--good); }
-  .cell button { margin-top: 4px; width: 100%; }
-  .mscore { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
-  .mscore .big { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .mscore .small { color: var(--ink-3); font-size: 12px; }
-  .note.warn { color: var(--ink); background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
-  .slip-leg { display: grid; grid-template-columns: 1fr 86px 32px; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); padding: 8px 0; font-size: 14px; }
-  .slip-leg input, .field input, .field select { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; background: var(--surface-2); color: var(--ink); font-size: 16px; }
-  .slip-leg .lbl { font-size: 13px; }
-  .slip-leg .lbl small { display: block; color: var(--ink-3); }
-  .field { display: grid; gap: 4px; margin: 8px 0; font-size: 13px; color: var(--ink-2); }
-  .calc { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 14px; margin: 10px 0; font-variant-numeric: tabular-nums; }
-  .calc dt { color: var(--ink-2); } .calc dd { margin: 0; text-align: right; font-weight: 600; }
-  .bet { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
-  .bet .row small { color: var(--ink-3); }
-  .status { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); color: var(--ink-2); }
-  .status.won { background: var(--good); color: #fff; } .status.lost { background: var(--critical); color: #fff; }
-  .status.push, .status.void { border: 1px solid var(--line); }
-  .sumgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 12px; text-align: center; }
-  .sumgrid div { border: 1px solid var(--line); border-radius: 10px; padding: 6px 4px; }
-  .sumgrid b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
-  .sumgrid span { color: var(--ink-3); font-size: 11px; }
-  h2 { font-size: 16px; margin: 16px 0 6px; }
-  .toast { position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); background: var(--ink); color: var(--surface); padding: 10px 14px; border-radius: 12px; font-size: 14px; z-index: 20; }
+
+  /* ---------- search + chips ---------- */
+  .search { position: relative; margin: 4px 0 8px; }
+  .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--ink-3); }
+  .search input { width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 0 14px 0 40px; font-size: 16px; outline: none; }
+  .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 8px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips .lbl { flex: 0 0 auto; align-self: center; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; margin-right: 2px; }
+  .chip { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .chip .sw { width: 8px; height: 8px; border-radius: 50%; }
+  .count { color: var(--ink-3); font-size: 12px; margin: 2px 0 10px; }
+
+  /* ---------- cards ---------- */
+  .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--tc, var(--line-2)); opacity: .9; }
+  .card > summary { list-style: none; cursor: pointer; padding: 14px 14px 12px 16px; }
+  .card > summary::-webkit-details-marker { display: none; }
+  .card[open] > summary { border-bottom: 1px solid var(--line); }
+  .ph { display: flex; gap: 12px; align-items: center; }
+  .av { position: relative; flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--tc, #334155) 85%, white 15%), var(--tc, #334155) 70%);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px color-mix(in srgb, var(--tc, #334155) 70%, transparent); }
+  .av img.face { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; display: block; }
+  .av .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 20px; color: #fff; letter-spacing: .03em; }
+  .av .badge { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; }
+  .av .badge img { width: 19px; height: 19px; object-fit: contain; }
+  .who { min-width: 0; flex: 1; }
+  .who .nm { font-weight: 700; font-size: 16.5px; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .who .ctx { color: var(--ink-3); font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+  .who .ctx img { width: 16px; height: 16px; object-fit: contain; }
+  .st { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; letter-spacing: .04em; }
+  .st.q { background: var(--amber-soft); color: var(--amber); } .st.out { background: var(--red); color: #fff; }
+  .signal { flex: 0 0 auto; text-align: right; }
+  .verdict { display: inline-block; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 8px; letter-spacing: .06em; text-transform: uppercase; background: var(--surface-3); color: var(--ink-2); }
+  .verdict.strong { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); }
+  .verdict.lean { background: var(--accent-soft); color: var(--accent-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .verdict.split { background: var(--gold-soft); color: var(--gold); }
+  .verdict.out { background: var(--red); color: #fff; }
+  .agree { display: block; margin-top: 5px; font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .pickrow { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; flex-wrap: wrap; }
+  .mkt { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .line { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1; }
+  .line .dir { font-size: 13px; font-family: Inter, sans-serif; font-weight: 800; padding: 3px 7px; border-radius: 7px; letter-spacing: .04em; align-self: center; }
+  .line .dir.o { background: var(--accent-soft); color: var(--accent-2); } .line .dir.u { background: rgba(96,165,250,.14); color: #7CB4FB; }
+  .subrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+  .book { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 4px 9px; font-weight: 600; }
+  .book b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; font-size: 11px; color: var(--ink-3); border: 1px dashed var(--line-2); border-radius: 7px; padding: 1px 7px; }
+  .tag.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+  .meters { display: grid; gap: 7px; margin-top: 12px; }
+  .m { display: grid; grid-template-columns: 62px 1fr 42px 18px; align-items: center; gap: 10px; font-size: 12.5px; }
+  .m .lb { color: var(--ink-2); font-weight: 500; }
+  .m .v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .m .ok { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 900; color: var(--ink-3); }
+  .m .ok.y { background: var(--accent); color: var(--accent-ink); }
+  .bar { position: relative; height: 8px; border-radius: 99px; background: var(--track); overflow: visible; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--ink-3); opacity: .55; }
+  .bar i.y { background: linear-gradient(90deg, var(--accent), var(--accent-2)); opacity: 1; }
+  .bar i.pff { background: linear-gradient(90deg, #6366F1, #A78BFA); opacity: .9; }
+  .bar u { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 2px; background: var(--ink); opacity: .8; }
+  .why { margin-top: 11px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+  .detail { padding: 12px 16px 14px; }
+  .detail h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+  ul.whys { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+  ul.whys li { position: relative; padding-left: 16px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+  ul.whys li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+  ul.whys li.pff::before { background: #8B5CF6; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .btn { border: 1px solid var(--line-2); background: var(--surface-2); color: var(--ink); border-radius: 12px; padding: 0 14px; min-height: 42px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: var(--accent-ink); box-shadow: 0 8px 20px -10px rgba(16,185,129,.7); }
+  .btn.ghost { background: transparent; }
+  .btn.small { min-height: 34px; padding: 0 11px; font-size: 13px; border-radius: 10px; }
+  .btn.danger { color: var(--red); }
+  .btn:active { transform: translateY(1px); }
+  .empty { text-align: center; color: var(--ink-3); padding: 40px 12px; border: 1px dashed var(--line-2); border-radius: var(--radius); }
+  .empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+
+  /* skeleton */
+  .sk { height: 150px; border-radius: var(--radius); margin-bottom: 12px; border: 1px solid var(--line);
+    background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%); background-size: 300% 100%; animation: sh 1.4s infinite linear; }
+  @keyframes sh { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+  /* ---------- games ---------- */
+  .note-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; line-height: 1.5; }
+  .note-card b { color: var(--ink); }
+  .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .gcard > summary { list-style: none; cursor: pointer; padding: 14px 16px 14px; }
+  .gcard > summary::-webkit-details-marker { display: none; }
+  .gtop { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-3); font-weight: 600; letter-spacing: .02em; }
+  .gtop .mk { color: var(--ink-2); }
+  .teams { display: grid; gap: 10px; margin: 12px 0 10px; }
+  .trow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; }
+  .trow img.lg { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
+  .trow .fb { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-weight: 800; color: #fff; font-size: 15px; background: var(--tc, #334155); }
+  .trow .tn { font-weight: 700; font-size: 16px; line-height: 1.15; min-width: 0; }
+  .trow .tn small { display: block; color: var(--ink-3); font-weight: 500; font-size: 12px; }
+  .trow .pts { font-family: var(--display); font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .trow .pts.win { color: var(--ink); } .trow .pts.lose { color: var(--ink-3); }
+  .wp { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--track); margin: 4px 0 4px; }
+  .wp span { display: block; height: 100%; }
+  .wpl { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+  .lines { display: grid; grid-template-columns: 50px 1fr 1fr; gap: 7px; margin-top: 14px; align-items: stretch; }
+  .lines .hd { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; align-self: center; }
+  .lines .hd.c { text-align: center; }
+  .cell { border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 7px 9px; font-variant-numeric: tabular-nums; }
+  .cell .top { display: flex; justify-content: space-between; gap: 4px; font-weight: 700; font-size: 14px; }
+  .cell .top .pr { color: var(--ink-2); font-weight: 600; }
+  .cell .sub { color: var(--ink-3); font-size: 11.5px; margin-top: 2px; }
+  .cell.pos { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); }
+  .cell button { margin-top: 6px; width: 100%; min-height: 30px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--ink-2); }
+  .mism { margin-top: 12px; display: grid; gap: 6px; }
+  .mism .h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #A78BFA; font-weight: 800; }
+  .mism div.i { font-size: 12.5px; color: var(--ink-2); background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.22); border-radius: 10px; padding: 7px 10px; }
+  .gdetail { padding: 4px 16px 14px; border-top: 1px solid var(--line); }
+  .team-h { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
+  .team-h img { width: 26px; height: 26px; object-fit: contain; }
+  .team-h b { font-size: 15px; }
+  .team-h span { color: var(--ink-3); font-size: 12px; margin-left: auto; text-align: right; }
+  .outs { font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; } .outs b { color: var(--red); }
+  table.pl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+  table.pl th { text-align: right; color: var(--ink-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  table.pl th:first-child, table.pl td:first-child { text-align: left; }
+  table.pl td { text-align: right; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  table.pl td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  table.pl td .mini { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; object-position: top; vertical-align: middle; margin-right: 6px; background: var(--surface-3); }
+
+  /* ---------- slip + bets ---------- */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 14px; }
+  .panel h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+  .slip-leg { display: grid; grid-template-columns: 1fr 92px 36px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .slip-leg:last-child { border-bottom: 0; }
+  .slip-leg .lbl { font-size: 14px; font-weight: 600; }
+  .slip-leg .lbl small { display: block; color: var(--ink-3); font-weight: 500; font-size: 12px; }
+  .inp { width: 100%; height: 42px; border: 1px solid var(--line-2); border-radius: 11px; background: var(--surface-2); padding: 0 11px; font-size: 16px; outline: none; }
+  .inp:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .field { display: grid; gap: 6px; margin: 10px 0; font-size: 12px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .row2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .calc { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; margin: 12px 0 2px; font-variant-numeric: tabular-nums; }
+  .calc dt { color: var(--ink-2); } .calc dd { margin: 0; text-align: right; font-weight: 700; }
+  .calc dt.h { grid-column: 1 / -1; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; font-weight: 800; }
+  .calc dt.w { grid-column: 1 / -1; color: var(--amber); font-size: 12.5px; }
+  .bet { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .bet .top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+  .bet .top b { font-size: 14.5px; }
+  .bet small { color: var(--ink-3); }
+  .bst { font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 7px; text-transform: uppercase; letter-spacing: .06em; background: var(--surface-3); color: var(--ink-2); }
+  .bst.won { background: var(--accent); color: var(--accent-ink); } .bst.lost { background: var(--red); color: #fff; }
+  .meta2 { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; color: var(--ink-3); }
+  .foot { color: var(--ink-3); font-size: 12px; line-height: 1.6; margin: 18px 0 10px; }
+  .foot b { color: var(--ink-2); }
+
+  /* ---------- bottom nav ---------- */
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--glass); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar .wrap { display: grid; grid-template-columns: repeat(4, 1fr); height: 64px; }
+  .tabbar button { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; letter-spacing: .02em; position: relative; }
+  .tabbar svg { width: 23px; height: 23px; }
+  .tabbar button[aria-selected="true"] { color: var(--accent-2); }
+  .tabbar button[aria-selected="true"]::after { content: ""; position: absolute; top: 0; width: 28px; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent-2); }
+  .tabbar .cnt { position: absolute; top: 8px; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 800; display: grid; place-items: center; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); max-width: 92vw; background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 60; box-shadow: 0 12px 30px -10px rgba(0,0,0,.6); }
+
+  /* info sheet */
+  .sheet { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.5); display: grid; align-items: end; }
+  .sheet .in { background: var(--surface); border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 18px 18px calc(22px + env(safe-area-inset-bottom)); max-height: 80vh; overflow: auto; border-top: 1px solid var(--line); }
+  .sheet h2 { font-family: var(--display); font-size: 24px; margin: 0 0 8px; }
+  .sheet p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 8px 0; }
+  @media (min-width: 720px) { .kpi b { font-size: 26px; } }
 </style>
 </head>
 <body>
-<div class="banner" role="status">UNVALIDATED — Hard Rock, PrizePicks and Underdog lines with form and matchup heuristics, shrunk by how often they have been right. Not the model. Bet small.</div>
-<div class="record" id="record" hidden></div>
-<header>
-  <h1>Archer Board</h1>
-  <div class="meta" id="meta">loading…</div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="ag" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#059669"/><stop offset="1" stop-color="#6EE7B7"/></linearGradient>
+    <linearGradient id="abg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#101A2B"/><stop offset="1" stop-color="#070B12"/></linearGradient>
+    <symbol id="mark" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="15" fill="url(#abg)"/>
+      <circle cx="27" cy="37" r="16" fill="none" stroke="#6EE7B7" stroke-opacity=".22" stroke-width="3"/>
+      <circle cx="27" cy="37" r="9" fill="none" stroke="#6EE7B7" stroke-opacity=".38" stroke-width="3"/>
+      <circle cx="27" cy="37" r="3.6" fill="url(#ag)"/>
+      <path d="M27 37 L48 16" stroke="url(#ag)" stroke-width="4.6" stroke-linecap="round"/>
+      <path d="M37.5 15 H49 V26.5" fill="none" stroke="url(#ag)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="appbar">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Archer Analytics home">
+      <svg viewBox="0 0 64 64"><use href="#mark"/></svg>
+      <span class="wm"><b>ARCHER</b><span>Analytics</span></span>
+    </a>
+    <div class="seg" id="leagueSeg" role="group" aria-label="League">
+      <button data-league="nfl" aria-pressed="true">NFL</button>
+      <button data-league="cfb" aria-pressed="false">College</button>
+    </div>
+  </div>
 </header>
-<div class="tabs" role="tablist">
-  <button class="tab" role="tab" aria-selected="true" data-tab="props">Props</button>
-  <button class="tab" role="tab" aria-selected="false" data-tab="games">Games</button>
-  <button class="tab" role="tab" aria-selected="false" data-tab="bets">Bets <span id="slipCount"></span></button>
+
+<div class="wrap">
+  <div class="status" id="status">
+    <span class="pill"><span class="dot"></span><span id="meta">Loading board…</span></span>
+    <button class="pill warn" id="unval" type="button">UNVALIDATED · BET SMALL</button>
+  </div>
+
+  <!-- PROPS -->
+  <section id="propsView">
+    <div class="page-h"><h1>Props</h1><span class="sub" id="count"></span></div>
+    <div class="record hidden" id="record"></div>
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Search a player or team" autocomplete="off"></label>
+    <div class="chips" id="agreeFilters" role="group" aria-label="Signal">
+      <span class="lbl">Signal</span>
+      <button class="chip" data-agree="2" aria-pressed="false">Both clear</button>
+      <button class="chip" data-agree="1" aria-pressed="true">Either clears</button>
+      <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
+    </div>
+    <div class="chips" id="bookFilters" role="group" aria-label="App"></div>
+    <div class="chips" id="marketFilters" role="group" aria-label="Market"></div>
+    <main id="list"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
+  </section>
+
+  <!-- GAMES -->
+  <section id="gamesView" class="hidden">
+    <div class="page-h"><h1>Games</h1><span class="sub" id="gmeta"></span></div>
+    <div class="chips" id="dayFilters" role="group" aria-label="Day">
+      <button class="chip" data-day="today" aria-pressed="false">Today</button>
+      <button class="chip" data-day="tomorrow" aria-pressed="false">Tomorrow</button>
+      <button class="chip" data-day="all" aria-pressed="true">All games</button>
+    </div>
+    <div class="note-card" id="modelNote"></div>
+    <main id="games"><div class="sk"></div><div class="sk"></div></main>
+    <div class="foot">Model score comes from team ratings built on past results only — it never sees a betting line. Win and cover chances treat the final margin and total as bell curves with the spread measured in the backtest.</div>
+  </section>
+
+  <!-- SLIP -->
+  <section id="slipView" class="hidden">
+    <div class="page-h"><h1>Slip</h1><span class="sub">parlays &amp; pick'em entries</span></div>
+    <div class="panel">
+      <h3>Legs</h3>
+      <div id="slip"></div>
+      <div class="field">Add a leg by hand
+        <input class="inp" id="manualLabel" placeholder="What is the bet? e.g. Chiefs ML">
+      </div>
+      <div class="row2">
+        <input class="inp" id="manualOdds" inputmode="numeric" placeholder="Odds, e.g. -110 or +150">
+        <button class="btn" id="addManual">Add leg</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Math</h3>
+      <div class="field">Stake ($)<input class="inp" id="stake" inputmode="decimal" value="10"></div>
+      <dl class="calc" id="calc"></dl>
+      <div class="actions">
+        <button class="btn primary" id="trackParlay">Track as parlay / entry</button>
+        <button class="btn" id="trackSingles">Track each as a single</button>
+        <button class="btn ghost danger" id="clearSlip">Clear</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- BETS -->
+  <section id="betsView" class="hidden">
+    <div class="page-h"><h1>My bets</h1><span class="sub">graded automatically</span></div>
+    <div class="kpis" id="betSummary"></div>
+    <div class="chips" id="betFilters" role="group" aria-label="Bet status">
+      <button class="chip" data-bets="open" aria-pressed="true">Open</button>
+      <button class="chip" data-bets="settled" aria-pressed="false">Settled</button>
+      <button class="chip" data-bets="all" aria-pressed="false">All</button>
+    </div>
+    <div id="bets"></div>
+    <div class="actions">
+      <button class="btn small" id="exportBets">Export backup</button>
+      <label class="btn small">Import backup<input id="importBets" type="file" accept="application/json" hidden></label>
+      <button class="btn small" id="exportCsv">Export CSV</button>
+    </div>
+    <div class="foot">Bets are saved on this phone only — export a backup now and then. Open bets grade themselves when results publish, usually the morning after the game.</div>
+  </section>
+
+  <div class="foot" id="stamp"></div>
 </div>
-<div class="filters" id="leagueFilters" role="group" aria-label="League">
-  <button class="chip" data-league="nfl" aria-pressed="true">NFL</button>
-  <button class="chip" data-league="cfb" aria-pressed="false">College</button>
-</div>
 
-<section id="propsView">
-  <input class="search" id="q" type="search" placeholder="Search player or team" autocomplete="off">
-  <div class="filters" id="agreeFilters" role="group" aria-label="Minimum agreement">
-    <button class="chip" data-agree="2" aria-pressed="false">Both clear</button>
-    <button class="chip" data-agree="1" aria-pressed="true">Either clears</button>
-    <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
+<nav class="tabbar" role="tablist" aria-label="Sections">
+  <div class="wrap">
+    <button role="tab" data-tab="props" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>Props</button>
+    <button role="tab" data-tab="games" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9.5" ry="6" transform="rotate(-35 12 12)"/><path d="m9.5 14.5 5-5M11 11l2 2M9.8 12.2l2 2M12.2 9.8l2 2"/></svg>Games</button>
+    <button role="tab" data-tab="slip" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Slip<span class="cnt hidden" id="slipCount"></span></button>
+    <button role="tab" data-tab="bets" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Bets</button>
   </div>
-  <div class="filters" id="bookFilters" role="group" aria-label="App"></div>
-  <div class="filters" id="marketFilters" role="group" aria-label="Market"></div>
-  <div class="count" id="count"></div>
-  <main id="list"></main>
-</section>
+</nav>
 
-<section id="gamesView" class="hidden">
-  <div class="filters" id="dayFilters" role="group" aria-label="Day">
-    <button class="chip" data-day="today" aria-pressed="false">Today</button>
-    <button class="chip" data-day="tomorrow" aria-pressed="false">Tomorrow</button>
-    <button class="chip" data-day="all" aria-pressed="true">All games</button>
-  </div>
-  <div class="note warn" id="modelNote"></div>
-  <div class="count" id="gmeta"></div>
-  <main id="games"></main>
-  <div class="note">Model score = team ratings from past results only; it never sees a betting line. Probabilities treat the final margin and total as normal curves with the spread measured in the backtest.</div>
-</section>
-
-<section id="betsView" class="hidden">
-  <h2>Parlay slip</h2>
-  <div id="slip"></div>
-  <div class="field">Add a leg by hand
-    <input id="manualLabel" placeholder="What is the bet? e.g. Chiefs ML">
-  </div>
-  <div class="actions">
-    <input id="manualOdds" class="search" style="margin:0;flex:1" inputmode="numeric" placeholder="Odds, e.g. -110 or +150">
-    <button class="btn" id="addManual">Add leg</button>
-  </div>
-  <div class="field">Stake ($)<input id="stake" inputmode="decimal" value="10"></div>
-  <dl class="calc" id="calc"></dl>
-  <div class="actions">
-    <button class="btn primary" id="trackParlay">Track as parlay</button>
-    <button class="btn" id="trackSingles">Track each as a single</button>
-    <button class="btn danger" id="clearSlip">Clear slip</button>
-  </div>
-
-  <h2>My bets</h2>
-  <div class="sumgrid" id="betSummary"></div>
-  <div class="filters" id="betFilters" role="group" aria-label="Bet status">
-    <button class="chip" data-bets="open" aria-pressed="true">Open</button>
-    <button class="chip" data-bets="settled" aria-pressed="false">Settled</button>
-    <button class="chip" data-bets="all" aria-pressed="false">All</button>
-  </div>
-  <div id="bets"></div>
-  <div class="actions">
-    <button class="btn" id="exportBets">Export backup</button>
-    <label class="btn">Import backup<input id="importBets" type="file" accept="application/json" hidden></label>
-    <button class="btn" id="exportCsv">Export CSV</button>
-  </div>
-  <div class="note">Bets are saved on this phone only. Export a backup now and then; import it on another device to move them. Open bets grade themselves when results publish, usually the morning after the game.</div>
-</section>
-
-<footer>
-  <div>Every line and price is Hard Rock's. The tick on each meter is that side's breakeven at its price (52.4% at −110). <b>Fair</b>: Hard Rock's price with the vig removed; it always sits under the tick and never counts as a vote.</div>
-  <div><b>Form</b>: the player's recent games. <b>Matchup</b>: form × opponent allowed rate × game script × environment. Both are shrunk toward the fair price by how often they have been right so far, so a side only clears when the projection disagrees with Hard Rock strongly.</div>
-  <div id="stamp"></div>
-</footer>
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
@@ -253,27 +410,45 @@
   };
   const state = {
     tab: "props", league: store.get("archer-league", "nfl"), agree: 1, market: "all", book: "all", q: "",
-    rows: [], meta: {}, games: {}, results: null, day: "all", betFilter: "open",
+    rows: [], meta: {}, games: {}, results: null, day: "all", betFilter: "open", assets: null,
     slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
   };
-  const toast = (msg) => { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); };
+  const toast = (msg) => { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1900); };
   const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
   const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m/60).toFixed(1)} h` : `${(m/1440).toFixed(1)} d`; };
-  const ageSpan = (d, label) => { const a = ageText(d); if (!a) return ""; const stale = (Date.now() - d.getTime()) > 3 * 3600 * 1000; return `<span class="age ${stale ? "stale" : ""}">${label} ${a} ago${stale ? " ⚠" : ""}</span>`; };
   const leagueOf = (r) => String(r.sport || "").endsWith("ncaaf") ? "cfb" : "nfl";
   const normName = (n) => String(n || "").toLowerCase().replace(/\./g, " ").replace(/[^a-z ]/g, "").split(/\s+/).filter((t) => t && !["jr","sr","ii","iii","iv"].includes(t)).join(" ");
   const STAT_OF = { player_pass_yds: "pass_yds", player_pass_tds: "pass_td", player_pass_completions: "pass_cmp", player_pass_attempts: "pass_att", player_pass_interceptions: "int", player_rush_yds: "rush_yds", player_rush_attempts: "rush_att", player_receptions: "rec", player_reception_yds: "rec_yds" };
   const dec = (a) => a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
   const toAmerican = (d) => d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
   const implied = (a) => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
+  const APP = { prizepicks: "PrizePicks", underdog: "Underdog" };
+  const APP_DOT = { prizepicks: "#8B5CF6", underdog: "#FACC15", hardrockbet_fl: "#D4AF37", hardrockbet: "#D4AF37" };
+  const bookName = (b) => APP[b] || (String(b).startsWith("hardrock") ? "Hard Rock" : b);
+  const kickText = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); };
+
+  // ---------------------------------------------------------------- brand assets
+  function team(league, id) {
+    const a = state.assets && state.assets[league];
+    if (!a || !id) return null;
+    return a.teams[id] || a.teams[a.alias[id]] || null;
+  }
+  const initials = (n) => String(n || "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  function avatar(name, league, teamId) {
+    const t = team(league, teamId);
+    const face = league === "nfl" && state.assets ? state.assets.players[normName(name)] : null;
+    const col = t && t.color ? t.color : "#334155";
+    return `<div class="av" style="--tc:${esc(col)}"><span class="ini">${esc(initials(name))}</span>${face ? `<img class="face" src="${esc(face)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:relative">` : ""}${t && t.logo ? `<span class="badge"><img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></span>` : ""}</div>`;
+  }
+  const logoImg = (league, id, cls) => { const t = team(league, id); return t && t.logo ? `<img class="${cls || ""}" src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""; };
 
   // ---------------------------------------------------------------- Props
-  function meter(label, p, be) {
-    if (p == null) return `<div class="m"><span class="lbl">${label}</span><div class="track"><span class="be" style="left:${be*100}%"></span></div><span class="val">—</span><span class="ok">no data</span></div>`;
+  function meter(label, p, be, kind) {
+    if (p == null) return "";
     const yes = p >= be;
-    return `<div class="m"><span class="lbl">${label}</span>
-      <div class="track" aria-hidden="true"><div class="fill" style="width:${Math.min(100, p*100)}%"></div><span class="be" style="left:${be*100}%"></span></div>
-      <span class="val">${pct(p)}</span><span class="ok ${yes ? "yes" : ""}">${yes ? "✓ clears" : "under"}</span></div>`;
+    return `<div class="m"><span class="lb">${label}</span>
+      <div class="bar" aria-hidden="true"><i class="${kind === "pff" ? "pff" : yes ? "y" : ""}" style="width:${Math.min(100, p * 100)}%"></i><u style="left:${be * 100}%"></u></div>
+      <span class="v">${pct(p)}</span><span class="ok ${yes ? "y" : ""}" title="${yes ? "clears" : "under"}">${yes ? "✓" : "·"}</span></div>`;
   }
   function propLeg(r) {
     return {
@@ -284,26 +459,39 @@
       dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null,
     };
   }
-  const APP = { prizepicks: "PrizePicks", underdog: "Underdog" };
   function card(r, i) {
-    const be = r.breakeven_p ?? 0.524;
-    const a = r.agree_count ?? 0;
-    const side = r.side === "over" ? "Higher" : "Lower";
-    const game = r.away_team && r.home_team ? `${esc(r.away_team)} @ ${esc(r.home_team)}` : "";
-    const whys = (r.why_points || []).map((w) => `<li>${esc(w)}</li>`).join("");
-    return `<details class="card">
+    const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, a = r.agree_count ?? 0;
+    const over = r.side === "over";
+    const t = team(lg, r.form_team);
+    const opp = r.opponent ? `${logoImg(lg, r.opponent)}vs ${esc((team(lg, r.opponent) || {}).abbr || r.opponent)}` : esc(`${r.away_team || ""} @ ${r.home_team || ""}`);
+    const vcls = r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : r.verdict === "Split" ? "split" : r.verdict === "Out" ? "out" : "";
+    const whys = (r.why_points || []).map((w) => `<li class="${String(w).startsWith("PFF") ? "pff" : ""}">${esc(w)}</li>`).join("");
+    const price = r.dfs
+      ? `<span class="book"><span class="sw" style="width:7px;height:7px;border-radius:50%;background:${APP_DOT[r.book] || "#94A3B8"}"></span>${esc(bookName(r.book))} · needs <b>${pct(be)}</b></span>`
+      : `<span class="book"><span class="sw" style="width:7px;height:7px;border-radius:50%;background:${APP_DOT[r.book] || "#D4AF37"}"></span>Hard Rock <b>${odds(r.price)}</b></span>`;
+    const tags = [
+      r.dfs && r.best_line === false ? '<span class="tag warn">better line on another app</span>' : "",
+      r.dfs && r.best_line === true && r.other_lines ? '<span class="tag">best line</span>' : "",
+      r.n_games != null && r.n_games < 5 ? `<span class="tag">thin form · ${r.n_games} g</span>` : "",
+    ].join("");
+    return `<details class="card" style="--tc:${esc((t && t.color) || "var(--line-2)")}">
       <summary>
-        <div class="row"><span class="player">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</span><span class="agree a${a}" aria-label="${a} of 2 projections clear">${a}/2</span></div>
-        <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
-        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.line}</b>${r.dfs ? `<span class="price">${esc(APP[r.book] || r.book)} · needs ${pct(be)}</span>${r.best_line === false ? '<span class="thin">better line elsewhere</span>' : ""}` : `<span class="price">${odds(r.price)}</span>`}${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.book_last_update ? new Date(r.book_last_update) : parseStamp(r.snapshot_ts), "line")}</div>
-        ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}" ${r.verdict === "Out" ? 'style="background:var(--critical);color:#fff"' : ""}>${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
-        <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}${r.p_pff != null ? meter("PFF", r.p_pff, be) : ""}</div>
+        <div class="ph">${avatar(r.player_ref, lg, r.form_team)}
+          <div class="who"><div class="nm">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</div>
+            <div class="ctx">${opp}${r.commence_time ? " · " + esc(kickText(r.commence_time)) : ""}</div></div>
+          <div class="signal">${r.verdict ? `<span class="verdict ${vcls}">${esc(r.verdict)}</span>` : ""}<span class="agree">${a}/2 clear</span></div>
+        </div>
+        <div class="pickrow"><span class="mkt">${esc(r.market_label || r.market)}</span>
+          <span class="line"><span class="dir ${over ? "o" : "u"}">${over ? "OVER" : "UNDER"}</span><span class="num">${r.line}</span></span></div>
+        <div class="subrow">${price}${tags}</div>
+        <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}${meter("PFF", r.p_pff, be, "pff")}</div>
+        ${r.why ? `<div class="why">${esc(r.why)}</div>` : ""}
       </summary>
       <div class="detail">
-        <b>Why</b>
+        <h4>Why</h4>
         <ul class="whys">${whys || `<li>${esc(r.why_long || "—")}</li>`}</ul>
         <div class="actions">
-          <button class="btn small" data-add="${i}">+ Add to slip</button>
+          <button class="btn small primary" data-add="${i}">+ Add to slip</button>
           <button class="btn small" data-track="${i}">Track as single</button>
         </div>
       </div>
@@ -315,44 +503,31 @@
     let rows = state.rows.filter((r) => leagueOf(r) === state.league && (r.agree_count ?? 0) >= state.agree);
     if (state.market !== "all") rows = rows.filter((r) => r.market === state.market);
     if (state.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === state.book);
-    if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent].some((v) => String(v ?? "").toLowerCase().includes(q)));
+    if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
     rows.sort((x, y) => (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9));
-    shown = rows.slice(0, 300);
+    shown = rows.slice(0, 250);
     const total = state.rows.filter((r) => leagueOf(r) === state.league).length;
-    $("#count").textContent = `${rows.length} of ${total} ${state.league === "cfb" ? "college" : "NFL"} lines${rows.length > 300 ? " (first 300 shown)" : ""}`;
-    $("#list").innerHTML = shown.length ? shown.map(card).join("") : `<div class="empty">${total ? "Nothing clears the filter. Loosen it, or wait for a fresh board." : "No props published for this league yet."}</div>`;
+    $("#count").textContent = `${rows.length} of ${total} lines${rows.length > 250 ? " · top 250" : ""}`;
+    $("#list").innerHTML = shown.length ? shown.map(card).join("")
+      : `<div class="empty"><b>${total ? "Nothing clears this filter" : "No props yet"}</b>${total ? "Loosen the signal filter, or check back after the next board." : "The next board publishes after the next line snapshot."}</div>`;
+  }
+  function chipGroup(el, label, key, items, current) {
+    el.innerHTML = items.length > 1 ? `<span class="lbl">${label}</span>` + items.map(([v, txt, dot]) =>
+      `<button class="chip" data-${key}="${esc(v)}" aria-pressed="${v === current}">${dot ? `<span class="sw" style="background:${dot}"></span>` : ""}${esc(txt)}</button>`).join("") : "";
   }
   function buildMarketChips() {
     const rows = state.rows.filter((r) => leagueOf(r) === state.league);
     const markets = [...new Set(rows.map((r) => r.market))];
     const label = (m) => (rows.find((r) => r.market === m) || {}).market_label || m;
-    state.market = "all";
-    state.book = "all";
+    state.market = "all"; state.book = "all";
     const books = [...new Set(rows.map((r) => r.book || "hardrockbet_fl"))];
-    const bookName = (b) => APP[b] || (b.startsWith("hardrock") ? "Hard Rock" : b);
-    $("#bookFilters").innerHTML = books.length > 1 ? [`<button class="chip" data-book="all" aria-pressed="true">All apps</button>`]
-      .concat(books.map((b) => `<button class="chip" data-book="${esc(b)}" aria-pressed="false">${esc(bookName(b))}</button>`)).join("") : "";
-    $("#marketFilters").innerHTML = [`<button class="chip" data-market="all" aria-pressed="true">All markets</button>`]
-      .concat(markets.map((m) => `<button class="chip" data-market="${esc(m)}" aria-pressed="false">${esc(label(m))}</button>`)).join("");
+    chipGroup($("#bookFilters"), "App", "book", [["all", "All apps"]].concat(books.map((b) => [b, bookName(b), APP_DOT[b]])), "all");
+    chipGroup($("#marketFilters"), "Market", "market", [["all", "All markets"]].concat(markets.map((m) => [m, label(m)])), "all");
   }
-  $("#marketFilters").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-market]"); if (!b) return;
-    state.market = b.dataset.market;
-    $("#marketFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderProps();
-  });
-  $("#bookFilters").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-book]"); if (!b) return;
-    state.book = b.dataset.book;
-    $("#bookFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderProps();
-  });
-  $("#agreeFilters").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-agree]"); if (!b) return;
-    state.agree = Number(b.dataset.agree);
-    $("#agreeFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderProps();
-  });
+  const press = (el, attr, b) => el.querySelectorAll(`button[data-${attr}]`).forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  $("#marketFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-market]"); if (!b) return; state.market = b.dataset.market; press($("#marketFilters"), "market", b); renderProps(); });
+  $("#bookFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-book]"); if (!b) return; state.book = b.dataset.book; press($("#bookFilters"), "book", b); renderProps(); });
+  $("#agreeFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-agree]"); if (!b) return; state.agree = Number(b.dataset.agree); press($("#agreeFilters"), "agree", b); renderProps(); });
   $("#q").addEventListener("input", (e) => { state.q = e.target.value; renderProps(); });
   $("#list").addEventListener("click", (e) => {
     const a = e.target.closest("button[data-add]"), t = e.target.closest("button[data-track]");
@@ -376,9 +551,10 @@
   function teamTable(name, blk, league) {
     if (!blk) return "";
     const sub = league === "nfl"
-      ? `implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)} vs targets ${fmt1(blk.targets_sum)}`
-      : `model ${fmt1(blk.model_points)} pts · recent avg ${fmt1(blk.recent_points)}`;
-    let html = `<div class="team-h"><b>${esc(name)}</b><span>${sub}</span></div>`;
+      ? `implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)}`
+      : `model ${fmt1(blk.model_points)} pts · recent ${fmt1(blk.recent_points)}`;
+    const t = team(league, name);
+    let html = `<div class="team-h">${logoImg(league, name)}<b>${esc((t && t.name) || name)}</b><span>${sub}</span></div>`;
     if (blk.qb_change) html += `<div class="outs"><b>QB change:</b> ${esc(blk.qb_change)} starts (starter ruled out).</div>`;
     if (blk.out && blk.out.length) html += `<div class="outs"><b>Out:</b> ${blk.out.map((o) => esc(o.player) + " (" + esc(o.pos) + ")").join(", ")} — volume redistributed.</div>`;
     for (const g of ["QB","RB","WR","TE"]) {
@@ -386,7 +562,10 @@
       if (!ps.length) continue;
       const cols = COLS[league][g];
       html += `<table class="pl"><thead><tr><th>${g}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
-      for (const p of ps) html += `<tr title="${esc(p.drivers || "")}"><td>${esc(p.player)}${p.status === "Q" ? '<span class="st q">Q</span>' : ""}${p.n_games < 5 ? `<span class="thin">${p.n_games} g</span>` : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`;
+      for (const p of ps) {
+        const face = league === "nfl" && state.assets ? state.assets.players[normName(p.player)] : null;
+        html += `<tr title="${esc(p.drivers || "")}"><td>${face ? `<img class="mini" src="${esc(face)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}${p.n_games < 5 ? ` <span class="tag">${p.n_games} g</span>` : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`;
+      }
       html += `</tbody></table>`;
     }
     return html;
@@ -410,31 +589,40 @@
     if (!leg) return `<div class="cell"><div class="sub">no line</div></div>`;
     const pos = leg.edge != null && leg.edge > 0;
     gameLegIndex.push(leg);
-    return `<div class="cell ${pos && flagged ? "pos" : ""}"><div class="top"><span>${esc(leg.short)}</span><span>${odds(leg.price)}</span></div>
-      <div class="sub">model ${pct(leg.p)} · needs ${pct(leg.be)}${pos ? " · +" + ((leg.edge) * 100).toFixed(1) : ""}</div>
-      <button class="btn small" data-gleg="${gameLegIndex.length - 1}">+ Slip</button></div>`;
+    return `<div class="cell ${pos && flagged ? "pos" : ""}"><div class="top"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div>
+      <div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>
+      <button data-gleg="${gameLegIndex.length - 1}">+ Slip</button></div>`;
+  }
+  function trow(league, id, pts, win, sub) {
+    const t = team(league, id);
+    const logo = t && t.logo ? `<img class="lg" src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.outerHTML='<span class=&quot;fb&quot; style=&quot;--tc:${esc((t && t.color) || "#334155")}&quot;>${esc(((t && t.abbr) || id || "").slice(0, 4))}</span>'">` : `<span class="fb" style="--tc:${esc((t && t.color) || "#334155")}">${esc(((t && t.abbr) || id || "").slice(0, 4))}</span>`;
+    return `<div class="trow">${logo}<div class="tn">${esc((t && t.name) || id)}<small>${esc(sub || (t && t.nick) || "")}</small></div><div class="pts ${pts == null ? "" : win ? "win" : "lose"}">${pts == null ? "" : fmt1(pts)}</div></div>`;
   }
   function gameCard(g, league) {
     const flags = (state.games.meta?.game_model?.[league]?.flags) || {};
     const legs = gameLegs(g, league), by = Object.fromEntries(legs.map((l) => [l.bet, l]));
     const m = g.model;
-    const kick = g.kickoff || (g.kickoff_utc ? new Date(g.kickoff_utc).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "");
-    const market = g.spread_line != null ? `market: ${g.spread_line > 0 ? g.home + " -" + g.spread_line : g.spread_line < 0 ? g.away + " " + g.spread_line : "pick"} · total ${g.total_line ?? "—"}` : "";
-    const header = m
-      ? `<div class="mscore"><span class="big">${esc(g.away)} ${fmt1(m.away)} – ${fmt1(m.home)} ${esc(g.home)}</span><span class="small">${esc(g.home)} wins ${pct(m.home_win_p)}</span></div>`
-      : `<div class="mscore"><span class="big">${esc(g.away)} @ ${esc(g.home)}</span><span class="small">no model projection</span></div>`;
+    const kick = g.kickoff_utc ? kickText(g.kickoff_utc) : (g.kickoff || "");
+    const market = g.spread_line != null ? `${g.spread_line > 0 ? g.home + " −" + g.spread_line : g.spread_line < 0 ? g.away + " " + g.spread_line : "Pick"} · O/U ${g.total_line ?? "—"}` : "";
+    const ta = team(league, g.away), th = team(league, g.home);
+    const wpH = m && m.home_win_p != null ? m.home_win_p : null;
+    const wp = wpH != null ? `<div class="wp"><span style="width:${(1 - wpH) * 100}%;background:${esc((ta && ta.color) || "#64748B")}"></span><span style="width:${wpH * 100}%;background:${esc((th && th.color) || "#94A3B8")}"></span></div>
+      <div class="wpl"><span>${esc((ta && ta.abbr) || g.away)} ${pct(1 - wpH)}</span><span>model win chance</span><span>${pct(wpH)} ${esc((th && th.abbr) || g.home)}</span></div>` : "";
     const lines = m && (g.spread || g.total || g.moneyline) ? `<div class="lines">
-        <div class="hd"></div><div class="hd">${esc(g.away)}</div><div class="hd">${esc(g.home)}</div>
+        <div></div><div class="hd c">${esc((ta && ta.abbr) || g.away)}</div><div class="hd c">${esc((th && th.abbr) || g.home)}</div>
         <div class="hd">Spread</div>${lineCell(by.spread_away, flags.ats)}${lineCell(by.spread_home, flags.ats)}
         <div class="hd">Total</div>${lineCell(by.over, flags.totals)}${lineCell(by.under, flags.totals)}
-        <div class="hd">ML</div>${lineCell(by.ml_away, flags.ats)}${lineCell(by.ml_home, flags.ats)}
-      </div>` : `<div class="note">${m ? "Hard Rock has not posted lines for this game." : ""}</div>`;
+        <div class="hd">Money</div>${lineCell(by.ml_away, flags.ats)}${lineCell(by.ml_home, flags.ats)}
+      </div>` : (m ? `<div class="sub" style="font-size:12px;color:var(--ink-3);margin-top:8px">Hard Rock has not posted lines for this game.</div>` : "");
+    const mism = (g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : "";
     const teams = g.teams || {};
+    const hasDetail = teams[g.away] || teams[g.home];
     return `<details class="gcard"><summary>
-      <div class="kick">${esc(kick)}${g.week ? " · Week " + g.week : ""}${market ? " · " + esc(market) : ""}</div>
-      ${header}${lines}
-      ${(g.mismatches || []).length ? `<div class="note"><b>PFF unit matchups</b> (unvalidated)</div><ul class="whys mism">${g.mismatches.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    </summary>${teamTable(g.away, teams[g.away], league)}${teamTable(g.home, teams[g.home], league)}</details>`;
+      <div class="gtop"><span>${esc(kick)}${g.week ? " · Week " + g.week : ""}</span><span class="mk">${esc(market)}</span></div>
+      <div class="teams">${trow(league, g.away, m ? m.away : null, m && m.away > m.home, "Away")}${trow(league, g.home, m ? m.home : null, m && m.home >= m.away, "Home")}</div>
+      ${wp}${lines}${mism}
+      ${hasDetail ? `<div class="sub" style="margin-top:12px;font-size:12px;color:var(--accent-2);font-weight:700">Player projections ›</div>` : ""}
+    </summary>${hasDetail ? `<div class="gdetail">${teamTable(g.away, teams[g.away], league)}${teamTable(g.home, teams[g.home], league)}</div>` : ""}</details>`;
   }
   const localDate = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toDateString(); };
   const gameDate = (g) => { const k = g.kickoff_utc ? new Date(g.kickoff_utc) : g.kickoff ? new Date(String(g.kickoff).slice(0, 10) + "T12:00:00") : null; return k && !isNaN(k) ? k.toDateString() : ""; };
@@ -448,47 +636,40 @@
     const bt = gm?.backtest, row = bt?.ats?.find((r) => r.min_diff === 3), tot = bt?.totals?.find((r) => r.min_diff === 3);
     const flagged = gm?.flags?.ats || gm?.flags?.totals;
     $("#modelNote").innerHTML = bt
-      ? `<b>${league === "cfb" ? "College" : "NFL"} game model, 2023–25 backtest:</b> sides ${row ? (row.win_rate * 100).toFixed(1) + "% (" + row.wins + "–" + row.losses + ")" : "—"}, totals ${tot ? (tot.win_rate * 100).toFixed(1) + "% (" + tot.wins + "–" + tot.losses + ")" : "—"} when it disagreed with the closing line by 3+ points. 52.4% breaks even. ${flagged ? "Green cells are backed by that record." : "<b>No edge found — scores are information only.</b>"}`
+      ? `<b>${league === "cfb" ? "College" : "NFL"} game model, 2023–25 backtest:</b> sides ${row ? (row.win_rate * 100).toFixed(1) + "% (" + row.wins + "–" + row.losses + ")" : "—"}, totals ${tot ? (tot.win_rate * 100).toFixed(1) + "% (" + tot.wins + "–" + tot.losses + ")" : "—"} when it disagreed with the closing line by 3+ points; 52.4% breaks even. ${flagged ? "Green cells are backed by that record." : "<b>No edge found — scores are information only.</b>"}`
       : `<b>${league === "cfb" ? "College" : "NFL"} game model not backtested yet</b> — treat every number as information only.`;
-    if (gm?.book && gm.book !== "hardrockbet_fl") $("#modelNote").innerHTML += ` <b>Lines: Hard Rock national feed</b> (the Florida feed has no ${league === "cfb" ? "college" : ""} games); check the price in your app before betting.`;
+    if (gm?.book && gm.book !== "hardrockbet_fl") $("#modelNote").innerHTML += ` <b>Lines: Hard Rock national feed</b> — check the price in your app before betting.`;
     gameLegIndex = [];
     games = games.slice().sort((a, b) => String(a.kickoff_utc || a.kickoff).localeCompare(String(b.kickoff_utc || b.kickoff)));
-    $("#gmeta").textContent = all.length ? `${games.length} of ${all.length} games` : "No games published yet.";
-    $("#games").innerHTML = games.length ? games.map((g) => gameCard(g, league)).join("") : `<div class="empty">${all.length ? "No games on that day." : "Nothing published for this league yet."}</div>`;
+    $("#gmeta").textContent = all.length ? `${games.length} of ${all.length}` : "";
+    $("#games").innerHTML = games.length ? games.map((g) => gameCard(g, league)).join("")
+      : `<div class="empty"><b>${all.length ? "No games that day" : "No games yet"}</b>${all.length ? "Try All games." : "Games publish with the next board."}</div>`;
   }
-  $("#games").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-gleg]"); if (!b) return;
-    e.preventDefault(); addLeg(gameLegIndex[Number(b.dataset.gleg)]);
-  });
-  $("#dayFilters").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-day]"); if (!b) return;
-    state.day = b.dataset.day;
-    $("#dayFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderGames();
-  });
+  $("#games").addEventListener("click", (e) => { const b = e.target.closest("button[data-gleg]"); if (!b) return; e.preventDefault(); addLeg(gameLegIndex[Number(b.dataset.gleg)]); });
+  $("#dayFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-day]"); if (!b) return; state.day = b.dataset.day; press($("#dayFilters"), "day", b); renderGames(); });
 
   // ---------------------------------------------------------------- Slip (parlay calculator)
-  function saveSlip() { store.set("archer-slip-v1", state.slip); $("#slipCount").textContent = state.slip.length ? `(${state.slip.length})` : ""; }
+  function saveSlip() { store.set("archer-slip-v1", state.slip); const c = $("#slipCount"); c.textContent = state.slip.length || ""; c.classList.toggle("hidden", !state.slip.length); }
   function addLeg(leg) {
     if (!leg) return;
     if (state.slip.some((l) => l.id === leg.id)) { toast("Already on the slip"); return; }
-    state.slip.push(leg); saveSlip(); renderSlip(); toast(`Added: ${leg.label}`);
+    state.slip.push(leg); saveSlip(); renderSlip(); toast(`Added · ${leg.label}`);
   }
   function renderSlip() {
     const legs = state.slip;
     $("#slip").innerHTML = legs.length ? legs.map((l, i) => `<div class="slip-leg"><div class="lbl">${esc(l.label)}<small>${esc(l.dfs ? l.app + " pick" : l.sub || (l.kind === "game" ? l.away + " @ " + l.home : l.kind))}${l.p != null ? " · model " + pct(l.p) : ""}</small></div>
-      ${l.dfs ? '<span class="thin">pick\'em</span>' : `<input inputmode="numeric" value="${l.price ?? ""}" data-odds="${i}" aria-label="Odds">`}<button class="btn small danger" data-rm="${i}" aria-label="Remove">✕</button></div>`).join("")
-      : `<div class="empty">Tap “+ Add to slip” on a prop or a game line, or add a leg by hand below.</div>`;
+      ${l.dfs ? '<span class="tag">pick\'em</span>' : `<input class="inp" inputmode="numeric" value="${l.price ?? ""}" data-odds="${i}" aria-label="Odds">`}<button class="btn small danger" data-rm="${i}" aria-label="Remove">✕</button></div>`).join("")
+      : `<div class="empty" style="padding:22px 10px"><b>Your slip is empty</b>Tap “+ Add to slip” on a prop or a game line, or add a leg by hand.</div>`;
     const stake = Math.max(0, Number($("#stake").value) || 0);
     // Pick'em legs pay by the app's entry multiplier, not by odds: show the chance they all
     // hit and the smallest multiplier that makes the entry worth playing.
     const picks = legs.filter((l) => l.dfs);
     const pickP = picks.length && picks.every((l) => l.p != null) ? picks.reduce((a, l) => a * l.p, 1) : null;
     const pickEvents = picks.map((l) => l.event).filter(Boolean);
-    const pickHtml = picks.length ? `<dt style="grid-column:1/-1"><b>Pick'em entry, ${picks.length} pick${picks.length > 1 ? "s" : ""}</b></dt>
-      <dt>Model's chance all hit</dt><dd>${pickP == null ? "— (a pick has no model %)" : (pickP * 100).toFixed(1) + "%"}</dd>
+    const pickHtml = picks.length ? `<dt class="h">Pick'em entry · ${picks.length} pick${picks.length > 1 ? "s" : ""}</dt>
+      <dt>Model's chance all hit</dt><dd>${pickP == null ? "—" : (pickP * 100).toFixed(1) + "%"}</dd>
       <dt>Worth it if the app pays more than</dt><dd>${pickP ? (1 / pickP).toFixed(1) + "x" : "—"}</dd>
-      ${pickEvents.length !== new Set(pickEvents).size ? `<dt style="grid-column:1/-1;color:var(--warn)">Two picks are in the same game, so their results are linked; the real chance differs from multiplying them.</dt>` : ""}` : "";
+      ${pickEvents.length !== new Set(pickEvents).size ? `<dt class="w">Two picks are in the same game, so their results are linked; the real chance differs from multiplying them.</dt>` : ""}` : "";
     const valid = legs.filter((l) => !l.dfs && Number.isFinite(Number(l.price)) && Math.abs(Number(l.price)) >= 100);
     if (!valid.length) { $("#calc").innerHTML = pickHtml; return; }
     const D = valid.reduce((a, l) => a * dec(Number(l.price)), 1);
@@ -498,14 +679,14 @@
     const events = valid.map((l) => l.event).filter(Boolean);
     const sameGame = events.length !== new Set(events).size;
     const ev = modelP != null ? modelP * (D - 1) * stake - (1 - modelP) * stake : null;
-    $("#calc").innerHTML = `<dt>Legs</dt><dd>${valid.length}</dd>
+    $("#calc").innerHTML = `<dt class="h">Sportsbook parlay · ${valid.length} leg${valid.length > 1 ? "s" : ""}</dt>
       <dt>Parlay odds</dt><dd>${odds(toAmerican(D))} (${D.toFixed(2)}x)</dd>
-      <dt>Pays on $${stake.toFixed(2)}</dt><dd>$${(stake * D).toFixed(2)} (profit $${(stake * (D - 1)).toFixed(2)})</dd>
+      <dt>Pays on $${stake.toFixed(2)}</dt><dd>$${(stake * D).toFixed(2)}</dd>
       <dt>Needs to hit</dt><dd>${pct(1 / D)}</dd>
-      <dt>Book's odds of hitting (with vig)</dt><dd>${(bookP * 100).toFixed(1)}%</dd>
-      <dt>Model's odds of hitting</dt><dd>${modelP == null ? "— (a leg has no model %)" : (modelP * 100).toFixed(1) + "%"}</dd>
-      <dt>Expected profit</dt><dd>${ev == null ? "—" : (ev >= 0 ? "+$" : "−$") + Math.abs(ev).toFixed(2)}</dd>
-      ${sameGame ? `<dt style="grid-column:1/-1;color:var(--warn)">Two or more legs are in the same game. Their results are linked, so the real chance differs from multiplying the legs, and books price same-game parlays with extra margin.</dt>` : ""}${pickHtml}`;
+      <dt>Book's chance (with vig)</dt><dd>${(bookP * 100).toFixed(1)}%</dd>
+      <dt>Model's chance</dt><dd>${modelP == null ? "—" : (modelP * 100).toFixed(1) + "%"}</dd>
+      <dt>Expected profit</dt><dd style="color:${ev == null ? "inherit" : ev >= 0 ? "var(--accent-2)" : "var(--red)"}">${ev == null ? "—" : (ev >= 0 ? "+$" : "−$") + Math.abs(ev).toFixed(2)}</dd>
+      ${sameGame ? `<dt class="w">Two or more legs are in the same game. Their results are linked, and books price same-game parlays with extra margin.</dt>` : ""}${pickHtml}`;
   }
   $("#slip").addEventListener("click", (e) => { const b = e.target.closest("button[data-rm]"); if (!b) return; state.slip.splice(Number(b.dataset.rm), 1); saveSlip(); renderSlip(); });
   $("#slip").addEventListener("input", (e) => { const i = e.target.dataset.odds; if (i == null) return; state.slip[Number(i)].price = Number(e.target.value); saveSlip(); renderSlip(); });
@@ -525,7 +706,7 @@
     return { id: "b" + Date.now() + Math.random().toString(36).slice(2, 6), placed: new Date().toISOString(), stake, legs: legs.map((l) => ({ ...l, result: null })), odds: toAmerican(D), status: "open", manual: false };
   }
   function trackSingle(leg) {
-    if (leg.dfs) { addLeg(leg); toast("Pick'em: add your picks to the slip, then Track parlay with the entry's multiplier"); return; }
+    if (leg.dfs) { addLeg(leg); toast("Pick'em: add your picks to the slip, then track the entry with its multiplier"); return; }
     const stake = Math.max(0, Number($("#stake").value) || 10);
     state.bets.unshift(newBet([leg], stake)); saveBets(); renderBets(); toast(`Tracking $${stake} on ${leg.label}`);
   }
@@ -589,24 +770,30 @@
     if (b.status === "lost") return 0;
     if (b.status === "push" || b.status === "void") return b.stake;
     const live = b.legs.filter((l) => l.result !== "push" && l.result !== "void");
+    if (b.legs.some((l) => l.dfs)) return b.stake * dec(Number(b.odds));
     return b.stake * live.reduce((a, l) => a * dec(Number(l.price)), 1);
   }
+  function toWin(b) { return b.legs.some((l) => l.dfs) ? b.stake * (dec(Number(b.odds)) - 1) : b.stake * (b.legs.reduce((a, x) => a * dec(Number(x.price)), 1) - 1); }
   function renderBets() {
     state.bets.forEach(settle); saveBets();
     const settled = state.bets.filter((b) => b.status !== "open");
     const staked = settled.reduce((a, b) => a + b.stake, 0), back = settled.reduce((a, b) => a + payout(b), 0);
     const w = settled.filter((b) => b.status === "won").length, l = settled.filter((b) => b.status === "lost").length, p = settled.length - w - l;
     const openStake = state.bets.filter((b) => b.status === "open").reduce((a, b) => a + b.stake, 0);
-    $("#betSummary").innerHTML = `<div><b>${w}–${l}${p ? "–" + p : ""}</b><span>record</span></div><div><b>${(back - staked >= 0 ? "+$" : "−$") + Math.abs(back - staked).toFixed(2)}</b><span>profit</span></div><div><b>${staked ? ((back - staked) / staked * 100).toFixed(1) + "%" : "—"}</b><span>ROI</span></div><div><b>$${openStake.toFixed(2)}</b><span>open</span></div>`;
+    const profit = back - staked;
+    $("#betSummary").innerHTML = `<div class="kpi"><b>${w}–${l}${p ? "–" + p : ""}</b><span>Record</span></div>
+      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${(profit >= 0 ? "+$" : "−$") + Math.abs(profit).toFixed(0)}</b><span>Profit</span></div>
+      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${staked ? ((profit) / staked * 100).toFixed(1) + "%" : "—"}</b><span>ROI</span></div>
+      <div class="kpi"><b>$${openStake.toFixed(0)}</b><span>Open</span></div>`;
     let list = state.bets;
     if (state.betFilter === "open") list = list.filter((b) => b.status === "open");
     if (state.betFilter === "settled") list = list.filter((b) => b.status !== "open");
     $("#bets").innerHTML = list.length ? list.map((b) => `<div class="bet">
-      <div class="row"><b>${b.legs.length > 1 ? b.legs.length + "-leg parlay" : esc(b.legs[0].label)}</b><span class="status ${b.status}">${b.status}</span></div>
-      ${b.legs.length > 1 ? `<ul class="whys">${b.legs.map((x) => `<li>${esc(x.label)} ${odds(x.price)}${x.result ? " — " + x.result : ""}</li>`).join("")}</ul>` : `<div class="row"><small>${esc(b.legs[0].sub || "")}</small></div>`}
-      <div class="row"><small>$${b.stake.toFixed(2)} at ${odds(b.odds)} · ${new Date(b.placed).toLocaleDateString()}</small><small>${b.status === "open" ? "to win $" + (b.stake * (b.legs.reduce((a, x) => a * dec(Number(x.price)), 1) - 1)).toFixed(2) : "returned $" + payout(b).toFixed(2)}</small></div>
-      <div class="actions"><button class="btn small" data-mark="won" data-bet="${b.id}">Won</button><button class="btn small" data-mark="lost" data-bet="${b.id}">Lost</button><button class="btn small" data-mark="push" data-bet="${b.id}">Push</button><button class="btn small" data-mark="auto" data-bet="${b.id}">Auto</button><button class="btn small danger" data-del="${b.id}">Delete</button></div>
-    </div>`).join("") : `<div class="empty">${state.bets.length ? "Nothing here." : "No bets tracked yet."}</div>`;
+      <div class="top"><b>${b.legs.length > 1 ? (b.legs.some((x) => x.dfs) ? b.legs.length + "-pick entry" : b.legs.length + "-leg parlay") : esc(b.legs[0].label)}</b><span class="bst ${b.status}">${b.status}</span></div>
+      ${b.legs.length > 1 ? `<ul class="whys" style="margin-top:8px">${b.legs.map((x) => `<li>${esc(x.label)} ${x.dfs ? "" : odds(x.price)}${x.result ? " — " + x.result : ""}</li>`).join("")}</ul>` : `<div class="meta2"><span>${esc(b.legs[0].sub || "")}</span></div>`}
+      <div class="meta2"><span>$${b.stake.toFixed(2)} at ${odds(b.odds)} · ${new Date(b.placed).toLocaleDateString()}</span><span>${b.status === "open" ? "to win $" + toWin(b).toFixed(2) : "returned $" + payout(b).toFixed(2)}</span></div>
+      <div class="actions"><button class="btn small" data-mark="won" data-bet="${b.id}">Won</button><button class="btn small" data-mark="lost" data-bet="${b.id}">Lost</button><button class="btn small" data-mark="push" data-bet="${b.id}">Push</button><button class="btn small" data-mark="auto" data-bet="${b.id}">Auto</button><button class="btn small ghost danger" data-del="${b.id}">Delete</button></div>
+    </div>`).join("") : `<div class="empty"><b>${state.bets.length ? "Nothing here" : "No bets tracked yet"}</b>${state.bets.length ? "" : "Track a single from a prop card, or a parlay from the Slip."}</div>`;
   }
   $("#bets").addEventListener("click", (e) => {
     const m = e.target.closest("button[data-mark]"), d = e.target.closest("button[data-del]");
@@ -618,17 +805,12 @@
     }
     if (d && confirm("Delete this bet?")) { state.bets = state.bets.filter((x) => x.id !== d.dataset.del); saveBets(); renderBets(); }
   });
-  $("#betFilters").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-bets]"); if (!b) return;
-    state.betFilter = b.dataset.bets;
-    $("#betFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderBets();
-  });
+  $("#betFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-bets]"); if (!b) return; state.betFilter = b.dataset.bets; press($("#betFilters"), "bets", b); renderBets(); });
   const download = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
   $("#exportBets").addEventListener("click", () => download(`archer-bets-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(state.bets, null, 1), "application/json"));
   $("#exportCsv").addEventListener("click", () => {
     const q = (x) => `"${String(x ?? "").replace(/"/g, '""')}"`;
-    const lines = [["placed","legs","odds","stake","status","returned"].join(",")].concat(state.bets.map((b) => [b.placed, q(b.legs.map((l) => `${l.label} ${odds(l.price)}`).join(" | ")), b.odds, b.stake, b.status, b.status === "open" ? "" : payout(b).toFixed(2)].join(",")));
+    const lines = [["placed","legs","odds","stake","status","returned"].join(",")].concat(state.bets.map((b) => [b.placed, q(b.legs.map((l) => `${l.label} ${l.dfs ? "" : odds(l.price)}`).join(" | ")), b.odds, b.stake, b.status, b.status === "open" ? "" : payout(b).toFixed(2)].join(",")));
     download("archer-bets.csv", lines.join("\n"), "text/csv");
   });
   $("#importBets").addEventListener("change", async (e) => {
@@ -637,51 +819,68 @@
     catch (_) { toast("That file is not an Archer backup"); }
   });
 
+  // ---------------------------------------------------------------- about sheet
+  $("#unval").addEventListener("click", () => {
+    const s = document.createElement("div"); s.className = "sheet";
+    s.innerHTML = `<div class="in" role="dialog" aria-label="How to read this board"><h2>How to read this board</h2>
+      <p><b>Unvalidated.</b> These are heuristics, not the finished model. Each is pulled toward the market by how often it has been right, so a pick only shows as clearing when it disagrees with the market strongly. Bet small.</p>
+      <p><b>The tick</b> on each bar is what the bet must hit to break even: Hard Rock's price, or your pick'em entry's per-pick rate.</p>
+      <p><b>Fair</b> is the market's own view with the vig removed (for pick'em, the sportsbooks' price at that line). It is context, never a vote.</p>
+      <p><b>Form</b> is the player's recent games. <b>Matchup</b> adds the opponent, game script and scoring environment. <b>PFF</b> is the unit matchup — coverage, pass rush vs line, run blocking vs run defense — graded weekly before it earns a vote.</p>
+      <p style="color:var(--ink-3);font-size:12px">Team names, logos and player photos belong to their owners and are shown for reference only.</p>
+      <div class="actions"><button class="btn primary" style="width:100%">Got it</button></div></div>`;
+    s.addEventListener("click", (e) => { if (e.target === s || e.target.closest("button")) s.remove(); });
+    document.body.appendChild(s);
+  });
+
   // ---------------------------------------------------------------- tabs, league, data
   function show(tab) {
     state.tab = tab;
-    document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === tab)));
-    $("#propsView").classList.toggle("hidden", tab !== "props");
-    $("#gamesView").classList.toggle("hidden", tab !== "games");
-    $("#betsView").classList.toggle("hidden", tab !== "bets");
-    $("#leagueFilters").classList.toggle("hidden", tab === "bets");
+    document.querySelectorAll(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === tab)));
+    for (const v of ["props", "games", "slip", "bets"]) $(`#${v}View`).classList.toggle("hidden", tab !== v);
+    $("#leagueSeg").style.visibility = tab === "props" || tab === "games" ? "visible" : "hidden";
     store.set("archer-tab", tab);
-    if (tab === "bets") { renderSlip(); renderBets(); }
+    if (tab === "slip") renderSlip();
+    if (tab === "bets") renderBets();
+    window.scrollTo({ top: 0 });
   }
-  document.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) show(b.dataset.tab); });
+  document.querySelector(".tabbar").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) show(b.dataset.tab); });
   function setLeague(lg) {
     state.league = lg; store.set("archer-league", lg);
-    $("#leagueFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
+    $("#leagueSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
     buildMarketChips(); renderProps(); renderGames();
   }
-  $("#leagueFilters").addEventListener("click", (e) => { const b = e.target.closest("button[data-league]"); if (b) setLeague(b.dataset.league); });
+  $("#leagueSeg").addEventListener("click", (e) => { const b = e.target.closest("button[data-league]"); if (b) setLeague(b.dataset.league); });
 
   const get = (f) => fetch(`./data/${f}?v=${Date.now()}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const assetsReady = get("assets.json").then((a) => { state.assets = a; });
   get("track.json").then((t) => {
     if (!t || !t.weeks || !t.weeks.length) return;
     const parts = t.weeks.slice(-4).map((w) => {
       const rate = w.lean_n ? Math.round((100 * w.lean_hits) / w.lean_n) : null;
       const b = w.brier || {}; const f = (x) => (x == null ? "–" : x.toFixed(3));
-      return `<b>Wk ${w.week}</b>: leans ${rate == null ? "–" : rate + "%"} of ${w.lean_n} · Brier form ${f(b.form)} / matchup ${f(b.matchup)} / book ${f(b.book)}`;
+      return `<b>Wk ${w.week}</b> leans ${rate == null ? "–" : rate + "%"} of ${w.lean_n} · Brier form ${f(b.form)} / matchup ${f(b.matchup)} / book ${f(b.book)}`;
     });
-    $("#record").innerHTML = "Track record — " + parts.join(" &nbsp;|&nbsp; ") + ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)}; at −110 a pick needs ${(100 * t.breakeven_p).toFixed(1)}%)`;
-    $("#record").hidden = false;
+    $("#record").innerHTML = "<b>Track record</b> · " + parts.join(" &nbsp;·&nbsp; ") + ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)})`;
+    $("#record").classList.remove("hidden");
   });
-  get("screen.json").then((data) => {
-    if (!data) { $("#meta").textContent = "No board published yet."; return; }
+  Promise.all([get("screen.json"), assetsReady]).then(([data]) => {
+    if (!data) { $("#meta").textContent = "No board published yet"; $("#list").innerHTML = `<div class="empty"><b>No board yet</b>It publishes after the next line snapshot.</div>`; return; }
     state.rows = data.rows || []; state.meta = data.meta || {};
-    const asOf = (state.meta.as_of || "").replace(/T(\d\d)-(\d\d)-(\d\d)Z/, " $1:$2 UTC");
-    const snapAge = ageText(parseStamp(state.meta.as_of));
-    $("#meta").innerHTML = `Board ${esc(asOf)} · Hard Rock, PrizePicks, Underdog${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
-    $("#stamp").textContent = `Exported ${state.meta.exported_at || ""}`;
+    const d = parseStamp(state.meta.as_of), age = ageText(d);
+    const stale = d && (Date.now() - d.getTime()) > 6 * 3600 * 1000;
+    $("#meta").textContent = age ? `Lines ${age} old` : "Board loaded";
+    $("#meta").parentNode.classList.toggle("stale", !!stale);
+    $("#stamp").textContent = `Board ${state.meta.as_of || ""} · exported ${state.meta.exported_at || ""}`;
     buildMarketChips(); renderProps();
   });
-  get("games.json").then((g) => { state.games = g || {}; renderGames(); });
+  Promise.all([get("games.json"), assetsReady]).then(([g]) => { state.games = g || {}; renderGames(); });
   get("results.json").then((r) => { state.results = r; if (r) { state.bets.forEach(settle); saveBets(); if (state.tab === "bets") renderBets(); } });
 
-  $("#leagueFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === state.league)));
+  $("#leagueSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === state.league)));
   saveSlip();
-  show(store.get("archer-tab", "props"));
+  const saved = store.get("archer-tab", "props");
+  show(["props", "games", "slip", "bets"].includes(saved) ? saved : "props");
 
   if ("serviceWorker" in navigator) {
     let hadController = !!navigator.serviceWorker.controller;
@@ -691,5 +890,4 @@
 })();
 </script>
 </body>
-
 </html>
