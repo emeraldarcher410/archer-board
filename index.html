@@ -279,9 +279,11 @@
       id: `p|${r.event_id}|${r.player_ref}|${r.market}|${r.side}|${r.line}`, kind: "prop", league: leagueOf(r),
       label: `${r.player_ref} ${r.market_label || r.market} ${r.side} ${r.line}`, sub: `${r.away_team || ""} @ ${r.home_team || ""}`,
       name_key: normName(r.player_ref), stat: STAT_OF[r.market] || null, side: r.side, line: r.line,
-      price: r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10),
+      price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10),
+      dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null,
     };
   }
+  const APP = { prizepicks: "PrizePicks", underdog: "Underdog" };
   function card(r, i) {
     const be = r.breakeven_p ?? 0.524;
     const a = r.agree_count ?? 0;
@@ -292,7 +294,7 @@
       <summary>
         <div class="row"><span class="player">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</span><span class="agree a${a}" aria-label="${a} of 2 projections clear">${a}/2</span></div>
         <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
-        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.line}</b><span class="price">${odds(r.price)}</span>${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.book_last_update ? new Date(r.book_last_update) : parseStamp(r.snapshot_ts), "line")}</div>
+        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.line}</b>${r.dfs ? `<span class="price">${esc(APP[r.book] || r.book)} · needs ${pct(be)}</span>${r.best_line === false ? '<span class="thin">better line elsewhere</span>' : ""}` : `<span class="price">${odds(r.price)}</span>`}${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.book_last_update ? new Date(r.book_last_update) : parseStamp(r.snapshot_ts), "line")}</div>
         ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}" ${r.verdict === "Out" ? 'style="background:var(--critical);color:#fff"' : ""}>${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
         <div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}</div>
       </summary>
@@ -434,6 +436,7 @@
     $("#modelNote").innerHTML = bt
       ? `<b>${league === "cfb" ? "College" : "NFL"} game model, 2023–25 backtest:</b> sides ${row ? (row.win_rate * 100).toFixed(1) + "% (" + row.wins + "–" + row.losses + ")" : "—"}, totals ${tot ? (tot.win_rate * 100).toFixed(1) + "% (" + tot.wins + "–" + tot.losses + ")" : "—"} when it disagreed with the closing line by 3+ points. 52.4% breaks even. ${flagged ? "Green cells are backed by that record." : "<b>No edge found — scores are information only.</b>"}`
       : `<b>${league === "cfb" ? "College" : "NFL"} game model not backtested yet</b> — treat every number as information only.`;
+    if (gm?.book && gm.book !== "hardrockbet_fl") $("#modelNote").innerHTML += ` <b>Lines: Hard Rock national feed</b> (the Florida feed has no ${league === "cfb" ? "college" : ""} games); check the price in your app before betting.`;
     gameLegIndex = [];
     games = games.slice().sort((a, b) => String(a.kickoff_utc || a.kickoff).localeCompare(String(b.kickoff_utc || b.kickoff)));
     $("#gmeta").textContent = all.length ? `${games.length} of ${all.length} games` : "No games published yet.";
@@ -459,12 +462,21 @@
   }
   function renderSlip() {
     const legs = state.slip;
-    $("#slip").innerHTML = legs.length ? legs.map((l, i) => `<div class="slip-leg"><div class="lbl">${esc(l.label)}<small>${esc(l.sub || (l.kind === "game" ? l.away + " @ " + l.home : l.kind))}${l.p != null ? " · model " + pct(l.p) : ""}</small></div>
-      <input inputmode="numeric" value="${l.price ?? ""}" data-odds="${i}" aria-label="Odds"><button class="btn small danger" data-rm="${i}" aria-label="Remove">✕</button></div>`).join("")
+    $("#slip").innerHTML = legs.length ? legs.map((l, i) => `<div class="slip-leg"><div class="lbl">${esc(l.label)}<small>${esc(l.dfs ? l.app + " pick" : l.sub || (l.kind === "game" ? l.away + " @ " + l.home : l.kind))}${l.p != null ? " · model " + pct(l.p) : ""}</small></div>
+      ${l.dfs ? '<span class="thin">pick\'em</span>' : `<input inputmode="numeric" value="${l.price ?? ""}" data-odds="${i}" aria-label="Odds">`}<button class="btn small danger" data-rm="${i}" aria-label="Remove">✕</button></div>`).join("")
       : `<div class="empty">Tap “+ Add to slip” on a prop or a game line, or add a leg by hand below.</div>`;
     const stake = Math.max(0, Number($("#stake").value) || 0);
-    const valid = legs.filter((l) => Number.isFinite(Number(l.price)) && Math.abs(Number(l.price)) >= 100);
-    if (!valid.length) { $("#calc").innerHTML = ""; return; }
+    // Pick'em legs pay by the app's entry multiplier, not by odds: show the chance they all
+    // hit and the smallest multiplier that makes the entry worth playing.
+    const picks = legs.filter((l) => l.dfs);
+    const pickP = picks.length && picks.every((l) => l.p != null) ? picks.reduce((a, l) => a * l.p, 1) : null;
+    const pickEvents = picks.map((l) => l.event).filter(Boolean);
+    const pickHtml = picks.length ? `<dt style="grid-column:1/-1"><b>Pick'em entry, ${picks.length} pick${picks.length > 1 ? "s" : ""}</b></dt>
+      <dt>Model's chance all hit</dt><dd>${pickP == null ? "— (a pick has no model %)" : (pickP * 100).toFixed(1) + "%"}</dd>
+      <dt>Worth it if the app pays more than</dt><dd>${pickP ? (1 / pickP).toFixed(1) + "x" : "—"}</dd>
+      ${pickEvents.length !== new Set(pickEvents).size ? `<dt style="grid-column:1/-1;color:var(--warn)">Two picks are in the same game, so their results are linked; the real chance differs from multiplying them.</dt>` : ""}` : "";
+    const valid = legs.filter((l) => !l.dfs && Number.isFinite(Number(l.price)) && Math.abs(Number(l.price)) >= 100);
+    if (!valid.length) { $("#calc").innerHTML = pickHtml; return; }
     const D = valid.reduce((a, l) => a * dec(Number(l.price)), 1);
     const bookP = valid.reduce((a, l) => a * implied(Number(l.price)), 1);
     const known = valid.every((l) => l.p != null);
@@ -479,7 +491,7 @@
       <dt>Book's odds of hitting (with vig)</dt><dd>${(bookP * 100).toFixed(1)}%</dd>
       <dt>Model's odds of hitting</dt><dd>${modelP == null ? "— (a leg has no model %)" : (modelP * 100).toFixed(1) + "%"}</dd>
       <dt>Expected profit</dt><dd>${ev == null ? "—" : (ev >= 0 ? "+$" : "−$") + Math.abs(ev).toFixed(2)}</dd>
-      ${sameGame ? `<dt style="grid-column:1/-1;color:var(--warn)">Two or more legs are in the same game. Their results are linked, so the real chance differs from multiplying the legs, and books price same-game parlays with extra margin.</dt>` : ""}`;
+      ${sameGame ? `<dt style="grid-column:1/-1;color:var(--warn)">Two or more legs are in the same game. Their results are linked, so the real chance differs from multiplying the legs, and books price same-game parlays with extra margin.</dt>` : ""}${pickHtml}`;
   }
   $("#slip").addEventListener("click", (e) => { const b = e.target.closest("button[data-rm]"); if (!b) return; state.slip.splice(Number(b.dataset.rm), 1); saveSlip(); renderSlip(); });
   $("#slip").addEventListener("input", (e) => { const i = e.target.dataset.odds; if (i == null) return; state.slip[Number(i)].price = Number(e.target.value); saveSlip(); renderSlip(); });
@@ -494,16 +506,26 @@
 
   // ---------------------------------------------------------------- Bet tracker
   function saveBets() { store.set("archer-bets-v1", state.bets); }
-  function newBet(legs, stake) {
-    const D = legs.reduce((a, l) => a * dec(Number(l.price)), 1);
+  function newBet(legs, stake, mult) {
+    const D = mult || legs.reduce((a, l) => a * dec(Number(l.price)), 1);
     return { id: "b" + Date.now() + Math.random().toString(36).slice(2, 6), placed: new Date().toISOString(), stake, legs: legs.map((l) => ({ ...l, result: null })), odds: toAmerican(D), status: "open", manual: false };
   }
   function trackSingle(leg) {
+    if (leg.dfs) { addLeg(leg); toast("Pick'em: add your picks to the slip, then Track parlay with the entry's multiplier"); return; }
     const stake = Math.max(0, Number($("#stake").value) || 10);
     state.bets.unshift(newBet([leg], stake)); saveBets(); renderBets(); toast(`Tracking $${stake} on ${leg.label}`);
   }
   $("#trackParlay").addEventListener("click", () => {
-    const legs = state.slip.filter((l) => Math.abs(Number(l.price)) >= 100);
+    const legs = state.slip.filter((l) => !l.dfs && Math.abs(Number(l.price)) >= 100);
+    const picks = state.slip.filter((l) => l.dfs);
+    if (picks.length && !legs.length) {
+      const m = Number(prompt(`Pick'em entry, ${picks.length} picks: what does it pay if all hit? (e.g. 3 for 3x)`, picks.length === 2 ? "3" : ""));
+      if (!(m > 1)) { toast("Enter the payout multiplier, like 3 or 6"); return; }
+      state.bets.unshift(newBet(picks, Math.max(0, Number($("#stake").value) || 0), m));
+      state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); toast("Pick'em entry tracked");
+      return;
+    }
+    if (picks.length) { toast("Track pick'em picks and sportsbook legs separately"); return; }
     if (!legs.length) { toast("The slip is empty"); return; }
     state.bets.unshift(newBet(legs, Math.max(0, Number($("#stake").value) || 0)));
     state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); toast("Parlay tracked");
