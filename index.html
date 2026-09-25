@@ -63,8 +63,9 @@
   .pick b { font-variant-numeric: tabular-nums; }
   .agree { flex: 0 0 auto; border-radius: 8px; padding: 3px 8px; font-size: 12px; font-weight: 700;
     background: var(--surface-2); color: var(--ink-2); }
-  .agree.a3 { background: var(--good); color: #fff; }
-  .agree.a2 { border: 2px solid var(--good); color: var(--ink); }
+  .agree.a2 { background: var(--good); color: #fff; }
+  .agree.a1 { border: 2px solid var(--good); color: var(--ink); }
+  .price { margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
   .meters { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
   .m { display: grid; grid-template-columns: 58px 1fr 52px 60px; align-items: center; gap: 8px; font-size: 13px; }
   .m .lbl { color: var(--ink-2); }
@@ -123,7 +124,7 @@
 </style>
 </head>
 <body>
-<div class="banner" role="status">UNVALIDATED — another book's price, a player's recent form and a matchup heuristic. Not the model. Bet small, log every entry.</div>
+<div class="banner" role="status">UNVALIDATED — Hard Rock lines with form and matchup heuristics, shrunk by how often they have been right. Not the model. Bet small.</div>
 <div class="track" id="track" hidden></div>
 <header>
   <h1>Archer Board</h1>
@@ -136,8 +137,8 @@
 <section id="propsView">
 <input class="search" id="q" type="search" placeholder="Search player or team" autocomplete="off">
 <div class="filters" id="agreeFilters" role="group" aria-label="Minimum agreement">
-  <button class="chip" data-agree="3" aria-pressed="false">All 3 agree</button>
-  <button class="chip" data-agree="2" aria-pressed="true">2+ agree</button>
+  <button class="chip" data-agree="2" aria-pressed="false">Both clear</button>
+  <button class="chip" data-agree="1" aria-pressed="true">Either clears</button>
   <button class="chip" data-agree="0" aria-pressed="false">Everything</button>
 </div>
 <div class="filters" id="marketFilters" role="group" aria-label="Market"></div>
@@ -155,14 +156,14 @@
   <div class="note">Score = the market's implied points (spread and total). Player lines = the matchup heuristic. Not reconciled: the team block shows QB attempts next to the sum of receiver targets so the gap is visible.</div>
 </section>
 <footer>
-  <div><b>Book</b>: the reference book's devigged price at Underdog's line. <b>Form</b>: the player's last 8 games (baseline a). <b>Matchup</b>: form × opponent allowed rate × game script × environment (heuristic).</div>
-  <div>Tier: <i>exact</i> same line · <i>bound</i> reference price is a floor · <i>approx</i> translated across the line gap. The tick on each meter is Underdog's breakeven.</div>
+  <div>Every line and price is Hard Rock's. The tick on each meter is that side's breakeven at its price (52.4% at −110). <b>Fair</b>: Hard Rock's price with the vig removed; it always sits under the tick and never counts as a vote.</div>
+  <div><b>Form</b>: the player's last 8 games. <b>Matchup</b>: form × opponent allowed rate × game script × environment. Both are shrunk toward the fair price by how often they have been right so far, so a side only clears when the projection disagrees with Hard Rock strongly.</div>
   <div id="stamp"></div>
 </footer>
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
-  const state = { rows: [], meta: {}, agree: 2, market: "all", q: "" };
+  const state = { rows: [], meta: {}, agree: 1, market: "all", q: "" };
   const pct = (p) => p == null ? "—" : (p * 100).toFixed(0) + "%";
   const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
   const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m/60).toFixed(1)} h` : `${(m/1440).toFixed(1)} d`; };
@@ -178,30 +179,32 @@
   }
 
   function card(r) {
-    const be = r.breakeven_p ?? state.meta.breakeven_p ?? 0.578;
+    const be = r.breakeven_p ?? 0.524;
+    const price = r.price == null ? "" : (r.price > 0 ? "+" : "") + Math.round(r.price);
     const a = r.agree_count ?? 0;
     const side = r.side === "over" ? "Higher" : "Lower";
     const game = r.away_team && r.home_team ? `${esc(r.away_team)} @ ${esc(r.home_team)}` : "";
     const drivers = r.drivers ? esc(r.drivers) : "";
     return `<details class="card">
       <summary>
-        <div class="row"><span class="player">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</span><span class="agree a${a}" aria-label="${a} of 3 agree">${a}/3</span></div>
+        <div class="row"><span class="player">${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</span><span class="agree a${a}" aria-label="${a} of 2 projections clear">${a}/2</span></div>
         <div class="game">${game}${r.opponent ? " · vs " + esc(r.opponent) : ""}</div>
-        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.ud_line}</b><span class="tier">${esc(r.tier)}</span>${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.ref_last_update ? new Date(r.ref_last_update) : parseStamp(r.snapshot_ts), "book line")}</div>
+        <div class="pick">${esc(r.market_label || r.market)} · <b>${side} ${r.line}</b><span class="price">${price}</span>${r.n_games != null && r.n_games < 5 ? `<span class="thin">thin form · ${r.n_games} g</span>` : ""}${ageSpan(r.book_last_update ? new Date(r.book_last_update) : parseStamp(r.snapshot_ts), "line")}</div>
         ${r.verdict ? `<div class="why"><span class="verdict ${r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : ""}" ${r.verdict === "Out" ? 'style="background:var(--critical);color:#fff"' : ""}>${esc(r.verdict)}</span>${esc(r.why || "")}</div>` : ""}
         <div class="meters">
-          ${meter("Book", r.p_hit_at_ud_line, be)}
+          ${meter("Fair", r.p_book, be)}
           ${meter("Form", r.p_naive, be)}
           ${meter("Matchup", r.p_matchup, be)}
         </div>
       </summary>
       <div class="detail"><dl>
-        <dt>Reference line</dt><dd>${r.ref_line ?? "—"} (${r.ref_over_price ?? "—"} / ${r.ref_under_price ?? "—"})</dd>
+        <dt>Hard Rock</dt><dd>${r.line ?? "—"} · over ${r.over_price ?? "—"} / under ${r.under_price ?? "—"} · this side needs ${pct(be)}</dd>
+        <dt>Before shrinking</dt><dd>form ${pct(r.p_naive_raw)} · matchup ${pct(r.p_matchup_raw)}</dd>
         <dt>Form mean</dt><dd>${r.form_mean ?? "—"}${r.n_games ? " over " + r.n_games + " games" : ""}${r.recent_hit_rate != null ? " · hit " + pct(r.recent_hit_rate) : ""}</dd>
         <dt>Projection</dt><dd>${r.proj_mean ?? "—"}${r.proj_sd ? " ± " + r.proj_sd : ""}</dd>
         <dt>Why</dt><dd>${esc(r.why_long || "—")}</dd>
         <dt>Drivers</dt><dd>${drivers || "—"}</dd>
-        <dt>Edge vs book</dt><dd>${r.edge != null ? (r.edge >= 0 ? "+" : "") + (r.edge*100).toFixed(1) + " pts" : "—"}</dd>
+        <dt>Edge vs breakeven</dt><dd>${r.edge != null ? (r.edge >= 0 ? "+" : "") + (r.edge*100).toFixed(1) + " pts" : "—"}${r.ev != null ? " · EV " + (r.ev >= 0 ? "+" : "") + (r.ev*100).toFixed(1) + "¢ per $1" : ""}</dd>
       </dl></div>
     </details>`;
   }
@@ -250,7 +253,7 @@
         return `<b>Wk ${w.week}</b>: leans ${rate == null ? "–" : rate + "%"} of ${w.lean_n} · Brier form ${fmt(b.form)} / matchup ${fmt(b.matchup)} / book ${fmt(b.book)}`;
       });
       el.innerHTML = "Track record — " + parts.join(" &nbsp;|&nbsp; ") +
-        ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)}; a lean needs ${Math.round(100 * t.breakeven_p)}% to pay)`;
+        ` &nbsp;(coin flip ${t.coin_flip_brier.toFixed(3)}; at −110 a pick needs ${(100 * t.breakeven_p).toFixed(1)}%)`;
       el.hidden = false;
     })
     .catch(() => {});
@@ -260,7 +263,7 @@
       state.rows = data.rows || []; state.meta = data.meta || {};
       const asOf = (state.meta.as_of || "").replace(/T(\d\d)-(\d\d)-(\d\d)Z/, " $1:$2 UTC");
       const snapAge = ageText(parseStamp(state.meta.as_of));
-      $("#meta").innerHTML = `Screen ${esc(asOf)} · ${state.rows.length} lines · vs ${esc(state.meta.reference_book || "reference")}${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
+      $("#meta").innerHTML = `Screen ${esc(asOf)} · ${state.rows.length} lines · Hard Rock${snapAge ? ` · <b>lines ${esc(snapAge)} old</b>` : ""}`;
       $("#stamp").textContent = `Exported ${state.meta.exported_at || ""}`;
       buildMarketChips(); render();
     })
