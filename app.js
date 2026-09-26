@@ -153,6 +153,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
+      mktTag(r), chgTags(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -160,7 +161,7 @@
         <div class="row1">${avatar(r.player_ref, lg, r.form_team)}
           <div class="who"><div class="nm">${state.watch.has(normName(r.player_ref)) ? '<span class="star">★</span>' : ""}${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</div>
             <div class="ctx">${ctxLine(r)}</div>
-            <div class="pick2" style="margin-top:6px"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span><span class="line" style="font-size:21px"><span class="dir ${over ? "o" : "u"}">${over ? "O" : "U"}</span><span class="num">${r.line}</span></span>${verdictChip(r)}</div></div>
+            <div class="pick2" style="margin-top:6px"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span><span class="line" style="font-size:21px"><span class="dir ${over ? "o" : "u"}">${over ? "O" : "U"}</span><span class="num">${r.line}</span></span>${verdictChip(r)}</div>${r.glance_head ? `<div class="gl">${esc(r.glance_head)}</div>` : ""}</div>
           <div style="text-align:center">${ring(r.p_model, be)}${dots(r, be)}</div>
         </div>
         <div class="row2"><div class="subrow" style="margin-top:0">${bookPill(r, be)}${edge}${tags}</div>
@@ -443,7 +444,7 @@
     const watched = state.watch.has(normName(r.player_ref));
     const marks = [{ v: r.form_mean, t: "form", c: "var(--ink-2)" }, { v: r.proj_mean, t: "matchup", c: "var(--accent-2)" }, { v: r.pff_mean, t: "PFF", c: "#A78BFA" }];
     const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><div class="r">
-        <button class="btn small" data-watch>${watched ? "★ Watching" : "☆ Watch"}</button><button class="btn small" data-share>Share</button></div></div>
+        <button class="btn small" data-target>🎯 Alert</button><button class="btn small" data-watch>${watched ? "★" : "☆"}</button><button class="btn small" data-share>Share</button></div></div>
       <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")}">
         <div class="wm2">${esc(((t && t.abbr) || r.form_team || "").slice(0, 4))}</div>
         ${faceCut(lg, r.player_ref, r.form_team)}
@@ -452,22 +453,26 @@
           <div class="subrow">${verdictChip(r)}${movement(r)}</div></div>
       </div>
       <div class="pickband"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${over ? "OVER" : "UNDER"} ${r.line}</div>
-          <div style="font-size:12px;color:var(--ink-3)">best estimate ${pct(r.p_model)} · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</div></div>
+          <div style="font-size:12px;color:var(--ink-3)">best estimate ${pct(r.p_model)} · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</div>
+          ${r.p_market != null && !r.dfs ? `<div style="font-size:12px;color:${r.off_market ? "var(--accent-2)" : "var(--ink-3)"}">market ${pct(r.p_market)} (${esc(r.market_books || "")})${r.off_market ? " · off-market" : ""}</div>` : ""}
+          ${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? `<div style="font-size:12px;font-weight:700;margin-top:2px">Suggested stake $${stakeFor(r.p_model, r.price)}</div>` : ""}</div>
         ${ring(r.p_model, be)}</div>
+      ${glancePanel(r)}
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
       <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
       ${r.form_sd ? `<div class="panel"><h3><span>Projection range</span><span style="text-transform:none;letter-spacing:0">shaded = your side</span></h3>${curveChart(r.proj_mean ?? r.form_mean, r.proj_sd || r.form_sd, Number(r.line), r.side, marks)}</div>` : ""}
       <div class="panel"><h3><span>Chances</span><span style="text-transform:none;letter-spacing:0">tick = break-even</span></h3>${meters(r, be)}</div>
       ${others.length > 1 || r.ref_book ? `<div class="panel"><h3>Lines across apps</h3><div class="cmp">${cmp}</div></div>` : ""}
-      <div class="panel"><h3>Why</h3><ul class="whys">${(r.why_points || []).map((x) => `<li class="${String(x).startsWith("PFF") ? "pff" : ""}">${esc(x)}</li>`).join("") || `<li>${esc(r.why_long || "—")}</li>`}</ul></div>
+      <details class="panel why"><summary><span>Full breakdown</span><span class="chev">›</span></summary><ul class="whys">${(r.why_points || []).map((x) => `<li class="${String(x).startsWith("PFF") ? "pff" : ""}">${esc(x)}</li>`).join("") || `<li>${esc(r.why_long || "—")}</li>`}</ul></details>
       <div class="actions"><button class="btn primary grow" data-add>${inSlip(r) ? "✓ On your slip" : "+ Add to slip"}</button><button class="btn grow" data-track>Track as single</button></div>`, true);
     s.addEventListener("click", (e) => {
       if (e.target.closest("[data-add]")) { toggleLeg(propLeg(r)); e.target.closest("[data-add]").textContent = inSlip(r) ? "✓ On your slip" : "+ Add to slip"; renderProps(); }
       if (e.target.closest("[data-track]")) trackSingle(propLeg(r));
       if (e.target.closest("[data-share]")) shareCard(r);
+      if (e.target.closest("[data-target]")) openTarget(r);
       if (e.target.closest("[data-watch]")) {
         const k = normName(r.player_ref); state.watch.has(k) ? state.watch.delete(k) : state.watch.add(k);
-        store.set("archer-watch", [...state.watch]); e.target.closest("[data-watch]").textContent = state.watch.has(k) ? "★ Watching" : "☆ Watch"; buzz(); renderProps();
+        store.set("archer-watch", [...state.watch]); e.target.closest("[data-watch]").textContent = state.watch.has(k) ? "★" : "☆"; buzz(); renderProps();
       }
     });
   }
@@ -615,6 +620,25 @@
     return `<div class="battle"><div class="t"><span>${esc(label)}</span><span>${fmt(b.value)} · league ${fmt(b.league)}</span></div>
       <div class="tug">${favours ? '<span class="mid"></span>' : ""}${bar}</div><div class="lg2"><span>${favours ? esc(abbr(league, b.off)) + " offense" : ""}</span><span>${esc(who)}</span><span>${favours ? esc(abbr(league, b.def)) + " defense" : ""}</span></div></div>`;
   }
+  // ADR-0039: the quick read above the detail
+  function glancePanel(r) {
+    if (!r.glance_head && !(r.glance || []).length) return "";
+    return `<div class="panel glance"><div class="gh">${esc(r.glance_head || "")}</div>${(r.glance || []).map((f) => `<div class="gf ${f.good ? "up" : "dn"}"><i>${f.good ? "▲" : "▼"}</i><span>${esc(f.t)}</span></div>`).join("")}</div>`;
+  }
+  function gameGlance(g, league) {
+    const m = g.model; if (!m) return "";
+    const H = abbr(league, g.home), A = abbr(league, g.away), mm = m.home - m.away, tot = m.home + m.away;
+    const who = (x) => (x >= 0 ? H : A), pts = [];
+    const head = `Model: <b>${esc(who(mm))} by ${Math.abs(mm).toFixed(1)}</b>, about ${tot.toFixed(0)} points total.`;
+    if (g.spread_line != null) {
+      const d = mm - g.spread_line, mk = `${who(g.spread_line)} by ${Math.abs(g.spread_line)}`;
+      pts.push(Math.abs(d) < 1.5 ? { good: true, t: `Agrees with the market (${mk})` } : { good: null, t: `Likes ${who(d)} more than the market does (market ${mk}; ${Math.abs(d).toFixed(1)}-pt gap)` });
+    }
+    if (g.total_line != null) { const d = tot - g.total_line; pts.push(Math.abs(d) < 2 ? { good: true, t: `Total in line with the market (${g.total_line})` } : { good: null, t: `Sees ${d > 0 ? "more" : "fewer"} points than the market's ${g.total_line} (${Math.abs(d).toFixed(1)} pts)` }); }
+    const edges = (g.battles || []).filter((b) => b.good_for && b.league).map((b) => ({ b, r: b.value / b.league })).sort((x, y) => Math.abs(y.r - 1) - Math.abs(x.r - 1)).slice(0, 2);
+    edges.forEach(({ b, r }) => { const offEdge = b.good_for === "off" ? r > 1 : r < 1; pts.push({ good: null, t: `${abbr(league, offEdge ? b.off : b.def)} edge: ${String(b.label || b.unit).replace(new RegExp(`\\b(${[b.off, b.def].map((x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g"), (x) => abbr(league, x))}` }); });
+    return `<div class="panel glance"><div class="gh">${head}</div>${pts.map((f) => `<div class="gf ${f.good === true ? "up" : "nt"}"><i>${f.good === true ? "✓" : "•"}</i><span>${esc(f.t)}</span></div>`).join("")}<div class="foot" style="margin:6px 0 0">Game scores are information only: the model has no proven edge on spreads or totals.</div></div>`;
+  }
   function openGame(g, league) {
     if (!g) return;
     const ta = team(league, g.away), th = team(league, g.home), m = g.model, w = when(g.kickoff_utc);
@@ -627,6 +651,7 @@
           <div class="mid2">${m ? "model score" : "@"}</div>
           <div>${big(g.home)}<div class="tnm">${esc((th && th.name) || g.home)}</div><div class="sc">${m ? fmt1(m.home) : ""}</div></div></div>
         <div style="margin-top:12px">${wpBar(g, league)}</div></div>
+      ${gameGlance(g, league)}
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
       ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · unvalidated</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
@@ -713,17 +738,27 @@
   $("#clearSlip").addEventListener("click", () => { if (!state.slip.length) return; const old = state.slip; state.slip = []; saveSlip(); renderSlip(); renderProps(); toast("Slip cleared", { label: "Undo", fn: () => { state.slip = old; saveSlip(); renderSlip(); renderProps(); } }); });
 
   // ------------------------------------------------------------------ bets
-  function saveBets() { store.set("archer-bets-v1", state.bets); }
+  // fromServer: the list just came from the server, so record it as synced without re-stamping
+  function saveBets(fromServer) {
+    const prev = store.get("archer-bets-sig", {}), sig = {}, now = new Date().toISOString(), tombs = store.get("archer-bets-tomb", {});
+    let changed = false;
+    state.bets.forEach((b) => { const h = betSig(b); if (!fromServer && prev[b.id] !== h) { b.updated = now; changed = true; } sig[b.id] = betSig(b); });
+    if (!fromServer) Object.keys(prev).forEach((id) => { if (!(id in sig)) { tombs[id] = now; changed = true; } });
+    store.set("archer-bets-v1", state.bets); store.set("archer-bets-sig", sig); store.set("archer-bets-tomb", tombs);
+    if (changed) queueSync();
+  }
   function newBet(legs, stake, mult) {
     const D = mult || legs.reduce((a, l) => a * dec(Number(l.price)), 1);
     return { id: "b" + Date.now() + Math.random().toString(36).slice(2, 6), placed: new Date().toISOString(), stake, legs: legs.map((l) => ({ ...l, result: null })), odds: toAmerican(D), status: "open", manual: false };
   }
   function trackSingle(leg) {
     if (leg.dfs) { if (!state.slip.some((l) => l.id === leg.id)) toggleLeg(leg); toast("Pick'em: build the entry in your slip, then track it with its payout", { label: "View slip", fn: () => { closeSheet(); show("slip"); } }); return; }
-    const stake = Math.max(0, Number($("#stake").value) || 10);
+    const stake = Math.max(0, Number($("#stake").value) || stakeFor(leg.p, leg.price) || 10);
+    if (!limitOk()) return;
     state.bets.unshift(newBet([leg], stake)); saveBets(); renderBets(); buzz(); toast(`Tracking $${stake} on ${leg.label}`);
   }
   $("#trackParlay").addEventListener("click", () => {
+    if (!limitOk()) return;
     const legs = state.slip.filter((l) => !l.dfs && Math.abs(Number(l.price)) >= 100), picks = state.slip.filter((l) => l.dfs);
     if (picks.length && !legs.length) {
       const best = picks.length >= 2 && picks.every((l) => l.p != null) ? entryOptions(picks)[0] : null;
@@ -740,6 +775,7 @@
   $("#trackSingles").addEventListener("click", () => {
     const legs = state.slip.filter((l) => !l.dfs && Math.abs(Number(l.price)) >= 100);
     if (!legs.length) { toast("No sportsbook legs on the slip"); return; }
+    if (!limitOk()) return;
     const stake = Math.max(0, Number($("#stake").value) || 0);
     legs.forEach((l) => state.bets.unshift(newBet([l], stake)));
     state.slip = state.slip.filter((l) => l.dfs); saveSlip(); saveBets(); renderSlip(); renderBets(); renderProps(); toast(`${legs.length} singles tracked`);
@@ -784,21 +820,22 @@
   const toWin = (b) => (isEntry(b) ? b.stake * (dec(Number(b.odds)) - 1) : b.stake * (b.legs.reduce((a, x) => a * dec(Number(x.price)), 1) - 1));
   function countUp(el) { $$("[data-count]", el).forEach((n) => { const to = Number(n.dataset.count), pre = n.dataset.pre || "", suf = n.dataset.suf || "", d = Number(n.dataset.d || 0); let t0 = null; const step = (ts) => { t0 = t0 || ts; const k = Math.min(1, (ts - t0) / 500); n.textContent = pre + (to * (1 - (1 - k) ** 3)).toFixed(d) + suf; if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); }); }
   function renderBets() {
-    state.bets.forEach(settle); saveBets();
+    state.bets.forEach(settle); saveBets(); renderBankroll();
+    const clv = clvSummary();
     const settled = state.bets.filter((b) => b.status !== "open"), staked = settled.reduce((a, b) => a + b.stake, 0), back = settled.reduce((a, b) => a + payout(b), 0);
     const w = settled.filter((b) => b.status === "won").length, l = settled.filter((b) => b.status === "lost").length, p = settled.length - w - l;
     const openStake = state.bets.filter((b) => b.status === "open").reduce((a, b) => a + b.stake, 0), profit = back - staked, cls = profit > 0 ? "good" : profit < 0 ? "bad" : "";
     $("#betSummary").innerHTML = `<div class="kpi"><b>${w}–${l}${p ? "–" + p : ""}</b><span>Record</span></div>
       <div class="kpi ${cls}"><b data-count="${Math.abs(profit)}" data-pre="${profit >= 0 ? "+$" : "−$"}">$0</b><span>Profit</span></div>
       <div class="kpi ${cls}"><b ${staked ? `data-count="${(profit / staked) * 100}" data-suf="%" data-d="1"` : ""}>${staked ? "0%" : "—"}</b><span>ROI</span></div>
-      <div class="kpi"><b data-count="${openStake}" data-pre="$">$0</b><span>Open</span></div>`;
+      <div class="kpi"><b data-count="${openStake}" data-pre="$">$0</b><span>Open</span></div>${clv ? `<div class="kpi ${clv.avg >= 0 ? "good" : "bad"}" style="grid-column:1/-1"><b>${clv.avg >= 0 ? "+" : ""}${(clv.avg * 100).toFixed(1)} pts</b><span>CLV · beat the close ${pct(clv.beat)} of ${clv.n}</span></div>` : ""}`;
     countUp($("#betSummary"));
     let list = state.bets;
     if (state.betFilter === "open") list = list.filter((b) => b.status === "open");
     if (state.betFilter === "settled") list = list.filter((b) => b.status !== "open");
     $("#bets").innerHTML = list.length ? list.map((b) => `<div class="bet">
       <div class="top3"><b>${b.legs.length > 1 ? (isEntry(b) ? b.legs.length + "-pick entry" : b.legs.length + "-leg parlay") : esc(b.legs[0].label)}</b><span class="bst ${b.status}">${b.status}</span></div>
-      ${b.legs.length > 1 ? `<ul class="whys" style="margin-top:8px">${b.legs.map((x) => `<li>${esc(x.label)} ${x.dfs ? "" : odds(x.price)}${x.result ? " — " + x.result : ""}</li>`).join("")}</ul>` : `<div class="meta2"><span>${esc(b.legs[0].sub || "")}</span></div>`}
+      ${b.legs.length > 1 ? `<ul class="whys" style="margin-top:8px">${b.legs.map((x) => `<li>${esc(x.label)} ${x.dfs ? "" : odds(x.price)}${x.result ? " — " + x.result : ""}${clvChip(x)}${postMortem(x)}</li>`).join("")}</ul>` : `<div class="meta2"><span>${esc(b.legs[0].sub || "")}${clvChip(b.legs[0])}</span></div>${postMortem(b.legs[0])}`}
       <div class="meta2"><span>$${b.stake.toFixed(2)} at ${odds(b.odds)} · ${new Date(b.placed).toLocaleDateString()}</span><span>${b.status === "open" ? "to win $" + toWin(b).toFixed(2) : "returned $" + payout(b).toFixed(2)}</span></div>
       <div class="actions"><button class="btn small" data-mark="won" data-bet="${b.id}">Won</button><button class="btn small" data-mark="lost" data-bet="${b.id}">Lost</button><button class="btn small" data-mark="push" data-bet="${b.id}">Push</button><button class="btn small" data-mark="auto" data-bet="${b.id}">Auto</button><button class="btn small ghost danger" data-del="${b.id}">Delete</button></div>
     </div>`).join("") : `<div class="empty"><b>${state.bets.length ? "Nothing here" : "No bets tracked yet"}</b>${state.bets.length ? "" : "Track a single from a player page, or a parlay or entry from the Slip."}</div>`;
@@ -852,8 +889,23 @@
       <circle cx="${x(pts.length - 1)}" cy="${y(last)}" r="4" fill="${col}"/>${ticks}
     </svg>`;
   }
+  function reportCard(all) {
+    const by = {};
+    all.filter((r) => r.grade !== "push").forEach((r) => { (by[r.market] = by[r.market] || []).push(r); });
+    const rows = Object.entries(by).map(([mk, rs]) => {
+      const n = rs.length, hit = rs.filter((r) => r.grade === "won").length / n, need = rs.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n;
+      const cl = rs.filter((r) => r.flag_p_book != null && r.p_book != null && Number(r.flag_line) === Number(r.line)).map((r) => r.p_book - r.flag_p_book);
+      const clv = cl.length ? cl.reduce((a, x) => a + x, 0) / cl.length : null;
+      const badge = n < 30 ? "unproven" : hit < need - 0.03 || (clv != null && clv < -0.01) ? "struggling" : hit >= need && (clv == null || clv >= 0) ? (n >= 150 ? "proven" : "promising") : "unproven";
+      return { mk, n, hit, need, clv, badge };
+    }).sort((a, b) => b.n - a.n);
+    return rows.length ? `<table class="rc"><tr><th>Market</th><th>Picks</th><th>Hit</th><th>Needs</th><th>CLV</th></tr>${rows.map((x) => `<tr><td>${esc(LABEL[x.mk] || x.mk)} <span class="badge ${x.badge}">${x.badge}</span></td><td>${x.n}</td><td style="color:${x.hit >= x.need ? "var(--accent-2)" : "var(--red)"}">${pct(x.hit)}</td><td>${pct(x.need)}</td><td>${x.clv == null ? "—" : (x.clv >= 0 ? "+" : "") + (x.clv * 100).toFixed(1)}</td></tr>`).join("")}</table>
+      <div class="foot" style="margin:8px 0 0">Every side the board cleared, graded, last ${(state.history && state.history.days) || 14} days. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
+      : `<div class="empty" style="padding:14px">Nothing graded yet.</div>`;
+  }
   function renderRecord() {
     const all = gradedHistory(), f = state.recFilter;
+    $("#card").innerHTML = reportCard(all);
     const pick = all.filter((r) => (f === "fav" ? r.fav : f === "both" ? (r.agree_count ?? 0) >= 2 : (r.agree_count ?? 0) >= 1));
     const dec2 = pick.filter((r) => r.grade !== "push"), w = dec2.filter((r) => r.grade === "won").length, n = dec2.length;
     const need = n ? dec2.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n : null;
@@ -885,12 +937,13 @@
     <p><b>Fair</b> is the market's own view with the vig removed (for pick'em, the sportsbooks' price at that line). <b>Form</b> is recent games. <b>Matchup</b> adds opponent, game script and scoring environment. <b>PFF</b> is the unit matchup, graded weekly before it earns a vote.</p>
     <p><b>Gestures:</b> tap a card for the full page · swipe right to add to slip · swipe left to hide.</p>
     <p style="color:var(--ink-3);font-size:12px">Team names, logos and player photos belong to their owners and are shown for reference only.</p>`));
-  $("#alertsBtn").addEventListener("click", () => openSheet(`<div class="sh-top"><h2>Phone alerts</h2><button class="btn small" data-close>Done</button></div>
+  $("#alertsBtn").addEventListener("click", () => { const s = openSheet(`<div class="sh-top"><h2>Notifications</h2><button class="btn small" data-close>Done</button></div>
+    ${notifSection()}<details class="howto"><summary>Or use the ntfy app</summary>
     <p>Archer can ping your phone when a new <b>★ Favorite</b> appears, and when a player on one is ruled <b>OUT</b>. Alerts come through the free <b>ntfy</b> app.</p>
     <ol><li>Install <b>ntfy</b> from the App Store or Google Play.</li>
       <li>On the server, add a long random topic name to <code>.env</code>: <code>NTFY_TOPIC=archer-…</code> (it works like a password — don't share it).</li>
       <li>In the ntfy app tap <b>+</b> and subscribe to that same topic name.</li></ol>
-    <p>Alerts then arrive after each board refresh. Tapping one opens this board.</p>`));
+    <p>Alerts then arrive after each board refresh. Tapping one opens this board.</p></details>`); bindNotif(s); });
   // theme: auto (follow the phone) -> light -> dark
   const THEME_ICON = {
     auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
@@ -913,8 +966,8 @@
     toast(theme === "auto" ? "Theme follows your phone" : `${theme[0].toUpperCase()}${theme.slice(1)} theme`);
   });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (theme === "auto") applyTheme("auto"); });
-  $("#refreshPill").addEventListener("click", () => location.reload());
-  $("#reloadBtn").addEventListener("click", () => location.reload());
+  $("#refreshPill").addEventListener("click", () => refresh().then((c) => toast(c ? "New board loaded" : "Already up to date")));
+  $("#reloadBtn").addEventListener("click", () => refresh());
 
   // ------------------------------------------------------------------ phone API (ADR-0037)
   // The server is optional: without it the board works as before. Pairing trades the 6-digit
@@ -951,7 +1004,7 @@
         const r = await fetch(url + "/api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !d.token) { msg.textContent = d.error ? `${d.error}${d.tries_left != null ? ` (${d.tries_left} tries left)` : ""}` : `Server said ${r.status}`; return; }
-        state.api = { url, token: d.token }; store.set("archer-api", state.api); buzz(); toast("Connected to your server"); done();
+        state.api = { url, token: d.token }; store.set("archer-api", state.api); buzz(); toast("Connected to your server"); syncBets(); loadTargets(); done();
       } catch (_) { msg.textContent = "Couldn't reach that address. Is the server set up (scripts/setup_api.sh)?"; }
     };
     $("#pairGo", root).addEventListener("click", go);
@@ -1129,21 +1182,260 @@
   setInterval(pollLive, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
 
+  // ------------------------------------------------------------------ ADR-0038
+  // ---- change tracking: what moved since you last looked
+  const sigOf = (r) => [r.line, r.dfs ? null : r.price, r.fav ? 1 : 0, r.status || "", r.off_market ? 1 : 0];
+  state.changes = new Map(); state.newCount = 0;
+  function computeChanges() {
+    const base = store.get("archer-seen", null), cur = {};
+    state.rows.forEach((r) => { cur[rowKey(r)] = sigOf(r); });
+    state.changes = new Map(); state.newCount = 0;
+    if (!base || !base.sig) { store.set("archer-seen", { at: Date.now(), sig: cur }); return; }
+    state.seenAt = base.at;
+    for (const r of state.rows) {
+      const was = base.sig[rowKey(r)], now = cur[rowKey(r)];
+      if (!was) { state.newCount++; continue; }
+      const tags = [];
+      if (was[0] !== now[0]) tags.push({ c: (r.side === "over") === (now[0] < was[0]) ? "good" : "", t: `line ${was[0]} → ${now[0]}` });
+      if (now[1] != null && was[1] != null && Math.abs(implied(now[1]) - implied(was[1])) >= 0.02) tags.push({ c: now[1] > was[1] ? "good" : "", t: `${odds(was[1])} → ${odds(now[1])}` });
+      if (now[2] && !was[2]) tags.push({ c: "fav", t: "new ★" });
+      if (!now[2] && was[2]) tags.push({ c: "", t: "no longer ★" });
+      if (now[3] !== was[3] && now[3]) tags.push({ c: "out", t: now[3] });
+      if (now[4] && !was[4]) tags.push({ c: "good", t: "off-market" });
+      if (tags.length) state.changes.set(rowKey(r), tags);
+    }
+  }
+  let seenTimer = null;
+  function markSeen() { const cur = {}; state.rows.forEach((r) => { cur[rowKey(r)] = sigOf(r); }); store.set("archer-seen", { at: Date.now(), sig: cur }); }
+  const chgTags = (r) => (state.changes.get(rowKey(r)) || []).map((t) => `<span class="chg ${t.c}">${esc(t.t)}</span>`).join("");
+  const mktTag = (r) => (r.off_market && !r.dfs ? `<span class="tag mkt">Off-market +${(r.market_edge * 100).toFixed(1)}</span>` : "");
+
+  // ---- bankroll: stake guide and a daily loss limit
+  state.bank = store.get("archer-bank", null); // {roll, maxPct, kelly, limit}
+  function stakeFor(p, price) {
+    const b = state.bank; if (!b || !b.roll || p == null || price == null) return null;
+    const d = dec(Number(price)), k = (p * d - 1) / (d - 1);
+    if (k <= 0) return 0;
+    return Math.max(1, Math.round(b.roll * Math.min((b.maxPct || 1) / 100, (b.kelly || 0.25) * k)));
+  }
+  const localDay = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(); };
+  function todayMoney() {
+    const t = new Date().toLocaleDateString(), mine = state.bets.filter((b) => localDay(b.placed) === t);
+    const settled = mine.filter((b) => b.status !== "open"), pl = settled.reduce((a, b) => a + payout(b) - b.stake, 0);
+    return { pl, open: mine.filter((b) => b.status === "open").reduce((a, b) => a + b.stake, 0), n: mine.length };
+  }
+  const overLimit = () => { const b = state.bank; if (!b || !b.limit) return false; const m = todayMoney(); return -m.pl - m.open >= b.limit; };
+  function limitOk() { return !overLimit() || confirm("You're at today's loss limit (settled losses plus money already in play). Track this anyway?"); }
+  function renderBankroll() {
+    const el = $("#bankroll"); if (!el) return;
+    const b = state.bank, m = todayMoney();
+    el.innerHTML = b && b.roll ? `${overLimit() ? `<div class="warnbar">Today's loss limit is reached. Stepping away is the +EV move.</div>` : ""}<div class="panel"><h3><span>Bankroll</span><button class="btn small ghost" id="bankEdit" style="min-height:26px">Edit</button></h3>
+        <dl class="calc" style="margin:0"><dt>Bankroll</dt><dd>$${b.roll.toFixed(0)}</dd><dt>Today</dt><dd style="color:${m.pl >= 0 ? "var(--accent-2)" : "var(--red)"}">${m.pl >= 0 ? "+" : "−"}$${Math.abs(m.pl).toFixed(2)} · $${m.open.toFixed(0)} in play</dd>${b.limit ? `<dt>Daily loss limit</dt><dd>$${b.limit}</dd>` : ""}<dt>Max per bet</dt><dd>${b.maxPct}% ($${(b.roll * b.maxPct / 100).toFixed(0)})</dd></dl></div>`
+      : `<button class="btn small" id="bankEdit" style="margin-bottom:12px">Set a bankroll for stake suggestions</button>`;
+    $("#bankEdit").addEventListener("click", editBank);
+  }
+  function editBank() {
+    const b = state.bank || { roll: 500, maxPct: 1, kelly: 0.25, limit: 50 };
+    const s = openSheet(`<div class="sh-top"><h2>Bankroll</h2><button class="btn small" data-close>Done</button></div>
+      <p style="color:var(--ink-2);font-size:14px;margin-top:0">Stakes are suggested from each pick's edge (a quarter of the Kelly stake) and capped per bet. While the board is unvalidated, keep the cap small.</p>
+      <div class="field">Bankroll ($)<input class="inp" id="bkRoll" inputmode="decimal" value="${b.roll}"></div>
+      <div class="field">Max per bet (% of bankroll)<input class="inp" id="bkMax" inputmode="decimal" value="${b.maxPct}"></div>
+      <div class="field">Daily loss limit ($, blank for none)<input class="inp" id="bkLim" inputmode="decimal" value="${b.limit ?? ""}"></div>
+      <div class="actions"><button class="btn primary grow" id="bkSave">Save</button>${state.bank ? '<button class="btn danger" id="bkOff">Turn off</button>' : ""}</div>`);
+    $("#bkSave", s).addEventListener("click", () => {
+      const roll = Number($("#bkRoll", s).value), maxPct = Math.min(10, Math.max(0.1, Number($("#bkMax", s).value) || 1)), limit = Number($("#bkLim", s).value) || null;
+      if (!(roll > 0)) { toast("Enter a bankroll"); return; }
+      state.bank = { roll, maxPct, kelly: 0.25, limit }; store.set("archer-bank", state.bank); closeSheet(); renderBankroll(); renderToday(); toast("Bankroll saved");
+    });
+    const off = $("#bkOff", s); if (off) off.addEventListener("click", () => { state.bank = null; store.set("archer-bank", null); closeSheet(); renderBankroll(); renderToday(); });
+  }
+
+  // ---- bets on the server: sync, CLV, logging from a screenshot
+  const hashStr = (x) => { let h = 5381; for (let i = 0; i < x.length; i++) h = ((h << 5) + h + x.charCodeAt(i)) | 0; return h; };
+  const betSig = (b) => { const { updated, ...rest } = b; return hashStr(JSON.stringify(rest)); };
+  let syncT = null;
+  const queueSync = () => { clearTimeout(syncT); syncT = setTimeout(syncBets, 1500); };
+  async function syncBets() {
+    if (!state.api) return;
+    const tombs = store.get("archer-bets-tomb", {});
+    try {
+      const d = await apiPost("/api/bets/sync", { bets: state.bets, deleted: Object.entries(tombs).map(([id, updated]) => ({ id, updated })) });
+      const gone = new Set(d.deleted || []);
+      state.bets = (d.bets || []).filter((b) => !gone.has(b.id)).sort((a, b) => String(b.placed).localeCompare(String(a.placed)));
+      store.set("archer-bets-tomb", {}); saveBets(true);
+      if (state.tab === "bets") renderBets(); renderLive(); if (state.tab === "today") renderToday();
+    } catch (_) { /* offline or not connected: the phone copy stays the record */ }
+  }
+  const clvChip = (l) => (l.clv != null ? `<span class="clv ${l.clv >= 0 ? "pos" : "neg"}" title="closing-line value">CLV ${l.clv >= 0 ? "+" : ""}${(l.clv * 100).toFixed(1)}</span>` : l.clv_line ? `<span class="clv ${l.clv_line > 0 ? "pos" : "neg"}">line ${l.clv_line > 0 ? "+" : ""}${l.clv_line}</span>` : "");
+  function resultRow(l) {
+    const res = state.results; if (!res || !l.date) return null;
+    return res.players.find((p) => p.league === l.league && p.name_key === l.name_key && dayDiff(p.date, l.date) <= 1) || null;
+  }
+  function postMortem(l) {
+    if (!l.result || !["won", "lost"].includes(l.result)) return "";
+    const row = resultRow(l), v = row && l.stat ? row.stats[l.stat] : null; if (v == null) return "";
+    const proj = l.mean != null ? ` vs ${Number(l.mean).toFixed(1)} projected (${v - l.mean >= 0 ? "+" : ""}${(v - l.mean).toFixed(1)})` : "";
+    const use = l.stat === "rush_yds" && row.stats.rush_att != null ? ` on ${row.stats.rush_att} carries` : l.stat === "rec_yds" && row.stats.rec != null ? ` on ${row.stats.rec} catches` : "";
+    return `<span class="pm">${l.result === "won" ? "✓" : "✗"} ${v}${use}${proj}</span>`;
+  }
+  function clvSummary() {
+    const legs = state.bets.flatMap((b) => b.legs).filter((l) => l.clv != null);
+    if (!legs.length) return null;
+    return { n: legs.length, beat: legs.filter((l) => l.clv > 0).length / legs.length, avg: legs.reduce((a, l) => a + l.clv, 0) / legs.length };
+  }
+  function openLog() {
+    const s = openSheet(`<div class="sh-top"><h2>Log a bet</h2><button class="btn small" data-close>Done</button></div><div id="lgBody"></div>`);
+    const body = $("#lgBody", s);
+    if (!state.api) { body.innerHTML = connectHtml("Logging from a screenshot runs on your server."); bindConnect(body, () => { closeSheet(); openLog(); }); return; }
+    const url = `${state.api.url}/api/bets/log?format=text`;
+    body.innerHTML = `<p style="margin-top:0;color:var(--ink-2);font-size:14px">Open the screenshot of your placed bet, press and hold the text, <b>Select All</b>, <b>Copy</b>, then paste.</p>
+      <textarea class="inp" id="lgText" style="height:120px;padding:10px" placeholder="Paste the bet receipt text…"></textarea>
+      <div class="actions" style="margin-top:10px"><button class="btn" id="lgPaste">Paste</button><button class="btn primary grow" id="lgGo">Log it</button></div><div id="lgRes" style="margin-top:12px"></div>
+      <details class="howto"><summary>One tap from Hard Rock: the “Archer log” Shortcut</summary><ol>
+        <li>In <b>Shortcuts</b>, duplicate <b>Archer check</b> and name it <b>Archer log</b>.</li>
+        <li>Change the URL to <code>${esc(url)}</code> <button class="btn small" data-copy2>Copy</button>. Everything else stays the same.</li></ol>
+        <p style="font-size:13px;color:var(--ink-3)">After you place a bet: screenshot the confirmation → Share → <b>Archer log</b>. It lands in your Bets tab, gets graded, shows closing-line value after kickoff, and you get live notifications during the game.</p></details>`;
+    $("[data-copy2]", body).addEventListener("click", () => copy(url, "Address"));
+    $("#lgPaste", body).addEventListener("click", async () => { try { $("#lgText", body).value = await navigator.clipboard.readText(); } catch (_) { toast("Long-press the box and tap Paste"); } });
+    $("#lgGo", body).addEventListener("click", async () => {
+      const t = $("#lgText", body).value.trim(); if (!t) return;
+      try { const d = await apiPost("/api/bets/log", { text: t }); $("#lgRes", body).innerHTML = `<div class="note-card" style="white-space:pre-line">${esc(d.text)}</div>`; if (d.bet) { buzz(); syncBets(); } }
+      catch (e) { $("#lgRes", body).innerHTML = `<div class="note-card">Couldn't log it (${esc(e.message)}).</div>`; }
+    });
+  }
+  $("#logBtn").addEventListener("click", openLog);
+
+  // ---- iPhone notifications (Web Push)
+  const b64u = (s) => { const p = "=".repeat((4 - (s.length % 4)) % 4), raw = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); };
+  function pushState() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+    return Notification.permission; // default | granted | denied
+  }
+  async function enablePush() {
+    if (!state.api) throw new Error("not-connected");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("permission was not given");
+    const { key } = await apiPost("/api/push/key", {});
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(key) }));
+    await apiPost("/api/push/subscribe", { subscription: sub.toJSON() });
+    store.set("archer-push", true);
+  }
+  function notifSection() {
+    const st = pushState(), on = st === "granted" && store.get("archer-push", false);
+    if (st === "unsupported") return `<div class="note-card"><b>iPhone notifications</b> need Archer opened from your Home Screen (Share → Add to Home Screen) on iOS 16.4 or later.</div>`;
+    if (!state.api) return `<div class="note-card"><b>iPhone notifications</b> come from your server. Connect it first (tap ✦ and type the code from <code>fm api pair</code>).</div>`;
+    return `<div class="panel"><h3><span>iPhone notifications</span><span style="text-transform:none;letter-spacing:0">${on ? "on" : st === "denied" ? "blocked" : "off"}</span></h3>
+      <p style="margin:0 0 10px;font-size:14px">New favorites, players ruled OUT on your picks, line targets hit, and your bets during games: legs hitting, "needs just one", cashed.</p>
+      ${st === "denied" ? `<p style="font-size:13px;color:var(--ink-3)">Notifications are blocked: Settings → Notifications → Archer.</p>` : `<div class="actions"><button class="btn primary grow" id="pushOn">${on ? "Re-register this phone" : "Enable notifications"}</button>${on ? '<button class="btn" id="pushTest">Test</button>' : ""}</div>`}<div class="foot" id="pushMsg" style="margin:8px 0 0"></div></div>`;
+  }
+  function bindNotif(root) {
+    const on = $("#pushOn", root), test = $("#pushTest", root), msg = $("#pushMsg", root);
+    if (on) on.addEventListener("click", async () => { msg.textContent = "Asking…"; try { await enablePush(); msg.textContent = "Done — a welcome notification is on its way."; buzz(); } catch (e) { msg.textContent = `Couldn't turn them on: ${e.message}`; } });
+    if (test) test.addEventListener("click", async () => { try { const d = await apiPost("/api/push/test", {}); msg.textContent = d.sent ? "Sent." : "No phone registered yet."; } catch (e) { msg.textContent = e.message; } });
+  }
+
+  // ---- line targets
+  state.targets = [];
+  async function loadTargets() { if (!state.api) return; try { state.targets = (await apiPost("/api/targets", { action: "list" })).targets || []; if (state.tab === "today") renderToday(); } catch (_) { /* keep */ } }
+  function openTarget(r) {
+    const over = r.side === "over", step = r.market === "player_receptions" || r.market === "player_pass_tds" ? 1 : r.line >= 100 ? 5 : r.line >= 20 ? 2 : 1;
+    const s = openSheet(`<div class="sh-top"><h2>Line alert</h2><button class="btn small" data-close>Done</button></div>
+      <p style="margin-top:0"><b>${esc(r.player_ref)}</b> ${over ? "over" : "under"} ${r.line} ${esc(r.market_label || LABEL[r.market] || "")} · ${esc(bookName(r.book))}${r.dfs ? "" : " " + odds(r.price)}</p>
+      <div class="field">Tell me when the line is ${over ? "at or below" : "at or above"}<input class="inp" id="tgLine" inputmode="decimal" value="${over ? r.line - step : r.line + step}"></div>
+      ${r.dfs ? "" : `<div class="field">…or the price is at least (e.g. -105)<input class="inp" id="tgPrice" inputmode="numeric" placeholder="optional" value=""></div>`}
+      <button class="btn primary" id="tgGo" style="width:100%">Set alert</button><div class="foot" id="tgMsg" style="margin:8px 0 0">Checked every time the board refreshes, no extra credits. You get one notification, then it clears.</div>`);
+    $("#tgGo", s).addEventListener("click", async () => {
+      if (!state.api) { $("#tgMsg", s).textContent = "Connect your server first (tap ✦)."; return; }
+      const line = $("#tgLine", s).value.trim(), priceEl = $("#tgPrice", s), price = priceEl && priceEl.value.trim();
+      try {
+        await apiPost("/api/targets", { action: "add", target: { book: r.book, event_id: r.event_id, player_ref: r.player_ref, market: r.market, side: r.side, kick: r.commence_time, label: `${r.player_ref} ${over ? "O" : "U"} ${LABEL[r.market] || r.market}`, line: line === "" ? null : Number(line), price: price ? Number(price) : null } });
+        closeSheet(); toast("Alert set — you'll get a notification"); loadTargets();
+      } catch (e) { $("#tgMsg", s).textContent = e.message; }
+    });
+  }
+
+  // ---- Today
+  function trow(r, extra) {
+    const lg = leagueOf(r), w = when(r.commence_time), be = r.breakeven_p ?? 0.524;
+    return `<div class="trow" data-key="${esc(rowKey(r))}">${avatar(r.player_ref, lg, r.form_team, "sm")}
+      <div><b>${esc(r.player_ref)}</b> <span style="color:var(--ink-3);font-weight:600">${r.side === "over" ? "O" : "U"} ${r.line} ${esc(r.market_label || LABEL[r.market] || "")}</span>
+        <small>${esc(bookName(r.book))}${r.dfs ? " · needs " + pct(be) : " " + odds(r.price)}${w.txt ? " · " + esc(w.txt) : ""}${r.fav ? " · ★" : ""}</small>${extra || ""}</div>
+      <div class="pv" style="color:${r.p_model >= be ? "var(--accent-2)" : "var(--ink-2)"}">${pct(r.p_model)}<small style="display:block;color:var(--ink-3)">${r.edge != null ? (r.edge > 0 ? "+" : "") + (r.edge * 100).toFixed(1) : ""}</small></div></div>`;
+  }
+  function renderToday() {
+    const el = $("#today"); if (!el) return;
+    const d = parseStamp(state.meta.as_of), age = ageText(d);
+    $("#todaySub").textContent = age ? `board ${age} old` : "";
+    const open = state.rows.filter((r) => !when(r.commence_time).locked && r.status !== "OUT");
+    const hr = open.filter((r) => !r.dfs && leagueOf(r) === "nfl").sort((a, b) => (b.fav - a.fav) || ((b.off_market ? 1 : 0) - (a.off_market ? 1 : 0)) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 5);
+    const soon = Date.now() + 40 * 3600000;
+    const cfb = open.filter((r) => r.dfs && leagueOf(r) === "cfb" && Date.parse(r.commence_time) < soon).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 4);
+    const offm = open.filter((r) => r.off_market && !r.dfs).sort((a, b) => b.market_edge - a.market_edge).slice(0, 3);
+    const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
+    const byKey = new Map(state.rows.map((r) => [rowKey(r), r]));
+    const moves = (state.meta.movers || []).map((m) => ({ m, r: byKey.get(rowKey(m)) })).filter((x) => x.r && !when(x.r.commence_time).locked).slice(0, 6);
+    const live = liveBets(), m = todayMoney();
+    const sec = (title, body, right) => `<div class="tsec"><h3><span>${title}</span>${right || ""}</h3>${body}</div>`;
+    const since = state.seenAt ? ageText(new Date(state.seenAt)) : null;
+    el.innerHTML = [
+      overLimit() ? `<div class="warnbar">Today's loss limit is reached. Stepping away is the +EV move.</div>` : "",
+      live.length ? sec("Live now", `<div class="trow live" data-go-bets><span style="display:grid;place-items:center"><i class="dot2" style="display:block;width:12px;height:12px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite"></i></span><div><b>${live.length} bet${live.length > 1 ? "s" : ""} in play</b><small>tap to sweat them</small></div><div class="pv">›</div></div>`) : "",
+      state.bank && state.bank.roll ? sec("Your day", `<div class="trow" data-go-bets><span></span><div><b style="color:${m.pl >= 0 ? "var(--accent-2)" : "var(--red)"}">${m.pl >= 0 ? "+" : "−"}$${Math.abs(m.pl).toFixed(2)}</b><small>$${m.open.toFixed(0)} in play · ${m.n} bet${m.n === 1 ? "" : "s"} today${state.bank.limit ? ` · limit $${state.bank.limit}` : ""}</small></div><div class="pv">›</div></div>`) : "",
+      sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
+      cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
+      offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
+      sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
+      moves.length ? sec(`Biggest moves${state.meta.movers[0] && parseStamp(state.meta.movers[0].since) ? " · since " + parseStamp(state.meta.movers[0].since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}`, moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("")) : "",
+      state.targets.length ? sec("Your line alerts", state.targets.map((t) => `<div class="trow"><span class="mk2 p">🎯</span><div><b>${esc(t.label || t.player_ref)}</b><small>${t.line != null ? `line ${t.side === "over" ? "≤" : "≥"} ${t.line}` : ""}${t.line != null && t.price != null ? " or " : ""}${t.price != null ? `price ≥ ${odds(t.price)}` : ""} · ${esc(bookName(t.book))}</small></div><button class="btn small ghost danger" data-untarget="${esc(t.id)}">✕</button></div>`).join("")) : "",
+    ].join("");
+    el.onclick = async (e) => {
+      if (e.target.closest("[data-go-bets]")) { show("bets"); return; }
+      const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
+      if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
+      const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
+    };
+    clearTimeout(seenTimer); seenTimer = setTimeout(() => { if (state.tab === "today" && !document.hidden) markSeen(); }, 5000);
+  }
+
+  // ---- pull to refresh (re-reads the published board; never spends credits)
+  (() => {
+    const ptr = $("#ptr"); let y0 = null, dy = 0, busy = false;
+    window.addEventListener("touchstart", (e) => { if (!sheetEl && window.scrollY <= 0 && !busy) { y0 = e.touches[0].clientY; dy = 0; } }, { passive: true });
+    window.addEventListener("touchmove", (e) => {
+      if (y0 == null) return; dy = e.touches[0].clientY - y0;
+      if (dy <= 0) { ptr.style.opacity = "0"; ptr.style.transform = "translateY(-70px)"; return; }
+      const k = Math.min(1, dy / 90); ptr.style.opacity = String(k); ptr.style.transform = `translateY(${Math.min(dy, 110) * 0.6 - 20}px) rotate(${dy * 3}deg)`;
+    }, { passive: true });
+    window.addEventListener("touchend", async () => {
+      if (y0 == null) return; y0 = null;
+      if (dy < 90) { ptr.style.opacity = "0"; ptr.style.transform = "translateY(-70px)"; return; }
+      busy = true; ptr.classList.add("spin"); ptr.style.transform = "translateY(30px)"; buzz();
+      const changed = await refresh();
+      ptr.classList.remove("spin"); ptr.style.opacity = "0"; ptr.style.transform = "translateY(-70px)"; busy = false;
+      toast(changed ? "New board loaded" : "Already up to date");
+    });
+  })();
+
   // ------------------------------------------------------------------ tabs, league, data
+  const TABS = ["today", "props", "games", "slip", "bets", "record"];
   function show(tab) {
+    if (!TABS.includes(tab)) tab = "today";
     state.tab = tab;
-    $$(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === tab)));
-    for (const v of ["props", "games", "slip", "bets", "record"]) $(`#${v}View`).classList.toggle("hidden", tab !== v);
+    const hl = tab === "record" ? "bets" : tab;
+    $$(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === hl)));
+    for (const v of TABS) $(`#${v}View`).classList.toggle("hidden", tab !== v);
     $("#leagueSeg").style.visibility = ["props", "games", "record"].includes(tab) ? "visible" : "hidden";
     store.set("archer-tab", tab);
     if (tab === "slip") renderSlip();
     if (tab === "bets") { renderBets(); pollLive(); }
     if (tab === "record") renderRecord();
+    if (tab === "today") { renderToday(); loadTargets(); }
     moveInd();
     window.scrollTo({ top: 0 });
   }
   function moveInd() {
-    const b = $(`.tabbar button[data-tab="${state.tab}"]`), ind = $("#tabInd");
+    const b = $(`.tabbar button[data-tab="${state.tab === "record" ? "bets" : state.tab}"]`), ind = $("#tabInd");
     if (!b || !ind) return;
     const wrap = b.parentElement.getBoundingClientRect(), r = b.getBoundingClientRect();
     ind.style.transform = `translateX(${r.left - wrap.left + r.width / 2 - 14}px)`;
@@ -1168,24 +1460,30 @@
   });
   const hideSplash = () => { const sp = $("#splash"); if (sp) { sp.classList.add("gone"); setTimeout(() => sp.remove(), 600); } };
   setTimeout(hideSplash, 1400);
-  const boardReady = Promise.all([get("screen.json"), assetsReady]);
-  boardReady.finally(() => setTimeout(hideSplash, 150));
-  boardReady.then(([data]) => {
+  function applyBoard(data) {
     if (!data) { $("#meta").textContent = "No board published yet"; $("#list").innerHTML = `<div class="empty"><b>No board yet</b>It publishes after the next line snapshot.</div>`; renderTops(); return; }
     state.rows = data.rows || []; state.meta = data.meta || {}; state.asOf = state.meta.as_of;
     const h = store.get("archer-hidden", null); if (h && h.asOf === state.asOf) state.hidden = new Set(h.keys || []);
     const d = parseStamp(state.meta.as_of), age = ageText(d), stale = d && Date.now() - d.getTime() > 6 * 3600 * 1000;
-    $("#meta").textContent = age ? `Lines ${age} old · tap to refresh` : "Board loaded";
+    $("#meta").textContent = age ? `Lines ${age} old · pull down to refresh` : "Board loaded";
     $("#refreshPill").classList.toggle("stale", !!stale);
     $("#stamp").textContent = `Board ${state.meta.as_of || ""} · exported ${state.meta.exported_at || ""}`;
-    renderProps(); if (state.tab === "slip") renderSlip();
-  });
-  Promise.all([get("games.json"), assetsReady]).then(([g]) => { state.games = g || {}; renderGames(); });
-  Promise.all([get("results.json"), get("history.json")]).then(([r, h]) => {
+    computeChanges(); renderProps(); if (state.tab === "slip") renderSlip(); if (state.tab === "today") renderToday();
+  }
+  // everything the app reads is the published board; refreshing it never spends Odds API credits
+  async function loadData() {
+    const before = state.asOf;
+    const [data, g, r, h] = await Promise.all([get("screen.json"), get("games.json"), get("results.json"), get("history.json"), assetsReady]);
+    applyBoard(data);
+    state.games = g || {}; renderGames();
     state.results = r; state.history = h;
     if (r) { state.bets.forEach(settle); saveBets(); if (state.tab === "bets") renderBets(); }
     if (state.tab === "record") renderRecord();
-  });
+    $("#newBoard").classList.add("hidden");
+    return !!before && before !== state.asOf;
+  }
+  const refresh = () => loadData().then((c) => { syncBets(); loadTargets(); return c; });
+  loadData().finally(() => setTimeout(hideSplash, 150)).then(() => { syncBets(); loadTargets(); });
   // a new board lands roughly every 15 minutes on game days: offer it without losing your place
   setInterval(() => { get("meta.json").then((m) => { if (m && state.asOf && m.as_of && m.as_of !== state.asOf) $("#newBoard").classList.remove("hidden"); }); }, 180000);
   // countdowns tick while the app is open
@@ -1193,8 +1491,11 @@
 
   $$("#leagueSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === state.league)));
   saveSlip();
-  const saved = store.get("archer-tab", "props");
-  show(["props", "games", "slip", "bets", "record"].includes(saved) ? saved : "props");
+  const hashTab = location.hash.replace("#", "");
+  show(TABS.includes(hashTab) ? hashTab : store.get("archer-tab", "today"));
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (e) => { const t = String((e.data && e.data.go) || "").split("#")[1]; if (TABS.includes(t)) { closeSheet(true); show(t); } });
+  window.addEventListener("hashchange", () => { const t = location.hash.replace("#", ""); if (TABS.includes(t)) { closeSheet(true); show(t); } });
+  $$("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
   pollLive(); // the Bets tab's live dot, and live numbers if a bet is in play
 
   if ("serviceWorker" in navigator) {
