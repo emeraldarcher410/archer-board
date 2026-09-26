@@ -1177,9 +1177,22 @@
     const [away, home] = String(l.sub || "").split(" @ ").map(teamKey);
     return box.games.find((g) => teamKey(g.away) === away && teamKey(g.home) === home) || null;
   }
+  // Names differ between books and ESPN ("DJ" / "D.J.", "Jr.", middle names): exact first,
+  // then the same last name and first initial among that game's players.
+  function livePlayer(box, key, gameId) {
+    if (box.players[key]) return box.players[key];
+    const parts = String(key || "").split(" ").filter(Boolean);
+    if (parts.length < 2) return null;
+    const last = parts[parts.length - 1], first = parts[0][0];
+    const hits = Object.entries(box.players).filter(([k, p]) => {
+      const q = k.split(" ").filter(Boolean);
+      return p.game_id === gameId && q.length >= 2 && q[q.length - 1] === last && q[0][0] === first;
+    });
+    return hits.length === 1 ? hits[0][1] : null;
+  }
   function legNow(l) {
     const g = legGame(l); if (!g) return null;
-    const box = state.live[l.league], pl = box.players[l.name_key], stat = l.market === "player_anytime_td" ? "td" : l.stat;
+    const box = state.live[l.league], pl = livePlayer(box, l.name_key, g.id), stat = l.market === "player_anytime_td" ? "td" : l.stat;
     const cur = pl && pl.stats[stat] != null ? pl.stats[stat] : g.state === "pre" ? null : 0, f = g.remaining ?? 1;
     let chance = null;
     if (cur != null && stat) {
