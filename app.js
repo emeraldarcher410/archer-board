@@ -175,7 +175,7 @@
       label: `${r.player_ref} ${r.market_label || LABEL[r.market] || r.market} ${r.side} ${r.line}`, sub: `${r.away_team || ""} @ ${r.home_team || ""}`,
       name_key: normName(r.player_ref), stat: STAT_OF[r.market] || null, side: r.side, line: r.line, market: r.market, book: r.book,
       price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10), kick: r.commence_time,
-      dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null, team: r.form_team,
+      dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null, team: r.form_team, pos: r.form_position || null,
       mean: r.proj_mean ?? r.form_mean ?? null, sd: r.proj_sd ?? r.form_sd ?? null, // sweat mode's pre-game projection
     };
   }
@@ -674,13 +674,60 @@
     state.slip.push(leg); saveSlip(); renderSlip(); buzz();
     toast(`Added · ${leg.label}`, { label: "View slip", fn: () => show("slip") });
   }
+  // ADR-0044: picks in the same game are priced together (Gaussian copula on historical
+  // same-game correlations); picks in different games stay independent.
+  const NFLSTAT = { player_pass_yds: "passing_yards", player_pass_tds: "passing_tds", player_pass_completions: "completions", player_pass_attempts: "attempts", player_pass_interceptions: "passing_interceptions", player_rush_yds: "rushing_yards", player_rush_attempts: "carries", player_receptions: "receptions", player_reception_yds: "receiving_yards" };
+  const POSG = { WR: "WR", TE: "TE", RB: "RB", FB: "RB", HB: "RB", QB: "QB" };
+  const zOf = (p) => { // inverse normal CDF, Acklam's rational approximation
+    const a = [-39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472, 2.50662827745924], b = [-54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857], c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373, 4.37466414146497, 2.93816398269878], d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
+    const q = Math.min(Math.max(p, 1e-9), 1 - 1e-9);
+    if (q < 0.02425) { const r = Math.sqrt(-2 * Math.log(q)); return (((((c[0] * r + c[1]) * r + c[2]) * r + c[3]) * r + c[4]) * r + c[5]) / ((((d[0] * r + d[1]) * r + d[2]) * r + d[3]) * r + 1); }
+    if (q > 1 - 0.02425) { const r = Math.sqrt(-2 * Math.log(1 - q)); return -(((((c[0] * r + c[1]) * r + c[2]) * r + c[3]) * r + c[4]) * r + c[5]) / ((((d[0] * r + d[1]) * r + d[2]) * r + d[3]) * r + 1); }
+    const r = q - 0.5, t = r * r; return (((((a[0] * t + a[1]) * t + a[2]) * t + a[3]) * t + a[4]) * t + a[5]) * r / (((((b[0] * t + b[1]) * t + b[2]) * t + b[3]) * t + b[4]) * t + 1);
+  };
+  function chol(C) {
+    const n = C.length, L = C.map(() => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) {
+      let s = C[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+      if (i === j) { if (s <= 1e-9) return null; L[i][i] = Math.sqrt(s); } else L[i][j] = s / L[j][j];
+    }
+    return L;
+  }
+  function jointEntry(picks) {
+    const n = picks.length, t = ((state.meta.pickem || {}).corr || {})[picks[0].league] || {};
+    const C = picks.map((_, i) => picks.map((_, k) => (i === k ? 1 : 0)));
+    let linked = false;
+    for (let i = 0; i < n; i++) for (let k = i + 1; k < n; k++) {
+      const a = picks[i], b = picks[k], sa = NFLSTAT[a.market], sb = NFLSTAT[b.market];
+      if (!a.event || a.event !== b.event || !sa || !sb) continue;
+      const rel = a.name_key && a.name_key === b.name_key ? "same" : a.team && a.team === b.team ? "team" : "opp";
+      const ka = `${POSG[String(a.pos || "").toUpperCase()] || "X"}.${sa}`, kb = `${POSG[String(b.pos || "").toUpperCase()] || "X"}.${sb}`;
+      const hit = t[`${rel}|${[ka, kb].sort().join("|")}`];
+      if (!hit) continue;
+      const rho = (a.side === b.side ? 1 : -1) * Number(hit[0]);
+      C[i][k] = C[k][i] = rho; if (Math.abs(rho) > 0.02) linked = true;
+    }
+    if (!linked) return null;
+    let L = chol(C), shrink = 1;
+    while (!L && shrink > 0.2) { shrink *= 0.9; L = chol(C.map((row, i) => row.map((v, k) => (i === k ? 1 : v * shrink)))); }
+    if (!L) return null;
+    let seed = 7; const rand = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+    const th = picks.map((l) => zOf(1 - Math.min(0.999, Math.max(0.001, l.p)))), counts = new Array(n + 1).fill(0), N = 40000;
+    for (let d = 0; d < N; d++) {
+      const e = picks.map(() => { const u = rand() || 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand()); });
+      let h = 0; for (let i = 0; i < n; i++) { let z = 0; for (let k = 0; k <= i; k++) z += L[i][k] * e[k]; if (z > th[i]) h++; }
+      counts[h]++;
+    }
+    const dist = counts.map((c) => c / N);
+    return { all: dist[n], dist, ind: picks.reduce((a, l) => a * l.p, 1) };
+  }
   function hitDist(ps) { // Poisson-binomial: P(exactly k hits)
     let d = [1];
     for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
     return d;
   }
-  function entryOptions(picks) {
-    const pay = (state.meta.pickem && state.meta.pickem.payouts) || {}, n = picks.length, ps = picks.map((l) => l.p), dist = hitDist(ps);
+  function entryOptions(picks, joint) {
+    const pay = (state.meta.pickem && state.meta.pickem.payouts) || {}, n = picks.length, ps = picks.map((l) => l.p), dist = joint ? joint.dist : hitDist(ps);
     const apps = [...new Set(picks.map((l) => l.book))], out = [];
     for (const app of apps.length === 1 ? apps : Object.keys(pay)) {
       const p = pay[app]; if (!p) continue;
@@ -694,8 +741,9 @@
     if (!picks.length) { $("#builder").innerHTML = ""; return; }
     const known = picks.every((l) => l.p != null), events = picks.map((l) => l.event), same = events.length !== new Set(events).size;
     const apps = [...new Set(picks.map((l) => l.book))];
-    const all = known ? picks.reduce((a, l) => a * l.p, 1) : null;
-    const opts = known && picks.length >= 2 ? entryOptions(picks) : [];
+    const joint = known && picks.length >= 2 && same ? jointEntry(picks) : null;
+    const all = known ? (joint ? joint.all : picks.reduce((a, l) => a * l.p, 1)) : null;
+    const opts = known && picks.length >= 2 ? entryOptions(picks, joint) : [];
     const used = new Set(picks.map((l) => l.id)), app = apps[0];
     const partners = state.rows.filter((r) => r.dfs && r.book === app && !when(r.commence_time).locked && (r.agree_count ?? 0) >= 2 && !events.includes(r.event_id) && !used.has(propLeg(r).id) && !picks.some((l) => l.name_key === normName(r.player_ref)))
       .sort((x, y) => (y.p_model ?? 0) - (x.p_model ?? 0)).slice(0, 4);
@@ -703,8 +751,8 @@
     $("#builder").innerHTML = `<div class="panel"><h3><span>Pick'em entry · ${picks.length} pick${picks.length > 1 ? "s" : ""}</span><span style="text-transform:none;letter-spacing:0">${esc(apps.map(bookName).join(" + "))}</span></h3>
       <dl class="calc" style="margin-top:0"><dt>Model's chance all hit</dt><dd>${all == null ? "—" : pct(all, 1)}</dd><dt>Worth playing if it pays more than</dt><dd>${all ? (1 / all).toFixed(1) + "x" : "—"}</dd></dl>
       ${apps.length > 1 ? `<div class="note-card" style="margin:8px 0 0">These picks are on different apps — an entry has to be on one app.</div>` : ""}
-      ${same ? `<div class="note-card" style="margin:8px 0 0;color:var(--amber)">Two picks share a game, so their results are linked; the real chance differs from multiplying them.</div>` : ""}
-      ${opts.length ? `<div style="margin-top:12px">${opts.map((o, k) => `<div class="entry ${k === 0 && o.ev > 0 ? "best" : ""}"><div><b>${esc(bookName(o.app))} ${picks.length}-pick ${o.kind}${o.kind === "Power" ? " · " + o.m + "x" : ""}</b><small>${esc(o.note)}</small></div><div class="ev ${o.ev >= 0 ? "pos" : "neg"}">${o.ev >= 0 ? "+" : ""}${(o.ev * 100).toFixed(1)}%<small style="display:block;font-size:11px;color:var(--ink-3)">expected return</small></div></div>`).join("")}<div class="foot" style="margin:4px 0 0">Payouts come from config — check them in your app. Picks treated as independent.</div></div>` : picks.length === 1 ? `<div class="foot" style="margin:8px 0 0">Add one or two more picks to see entry values.</div>` : ""}
+      ${same ? (joint ? `<div class="note-card" style="margin:8px 0 0">Picks in the same game move together. Priced from how these stats have moved together in past games: <b>${pct(joint.all, 1)}</b> all hit, vs ${pct(joint.ind, 1)} if they were unrelated.</div>` : `<div class="note-card" style="margin:8px 0 0;color:var(--amber)">Two picks share a game; there is no history for this pairing, so they are priced as unrelated.</div>`) : ""}
+      ${opts.length ? `<div style="margin-top:12px">${opts.map((o, k) => `<div class="entry ${k === 0 && o.ev > 0 ? "best" : ""}"><div><b>${esc(bookName(o.app))} ${picks.length}-pick ${o.kind}${o.kind === "Power" ? " · " + o.m + "x" : ""}</b><small>${esc(o.note)}</small></div><div class="ev ${o.ev >= 0 ? "pos" : "neg"}">${o.ev >= 0 ? "+" : ""}${(o.ev * 100).toFixed(1)}%<small style="display:block;font-size:11px;color:var(--ink-3)">expected return</small></div></div>`).join("")}<div class="foot" style="margin:4px 0 0">Payouts come from config — check them in your app. ${joint ? "Same-game picks priced together; different games independent." : "Picks treated as independent."}</div></div>` : picks.length === 1 ? `<div class="foot" style="margin:8px 0 0">Add one or two more picks to see entry values.</div>` : ""}
       ${partners.length ? `<h3 style="margin-top:14px">Good partners on ${esc(bookName(app))}</h3>${partners.map((r, k) => `<div class="partner">${avatar(r.player_ref, leagueOf(r), r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${r.side === "over" ? "O" : "U"} ${r.line} · ${pct(r.p_model)} · different game</small></div><button class="btn small" data-partner="${k}">+ Add</button></div>`).join("")}` : ""}
     </div>`;
   }
