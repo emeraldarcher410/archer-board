@@ -1215,7 +1215,7 @@
     if (!bets.length) { el.innerHTML = ""; return; }
     if (!state.api) { el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span></h3><p style="margin:0 0 10px;font-size:14px">${bets.length} open bet${bets.length > 1 ? "s are" : " is"} in play. Connect your server to sweat them here with live stats.</p><button class="btn small" id="liveConnect">Connect</button></div>`; $("#liveConnect").addEventListener("click", () => { const s = openSheet(`<div class="sh-top"><h2>Connect</h2><button class="btn small" data-close>Done</button></div><div id="cb"></div>`); $("#cb", s).innerHTML = connectHtml(""); bindConnect($("#cb", s), () => { closeSheet(); pollLive(); }); }); return; }
     const age = state.live && state.live.at ? Math.round((Date.now() - state.live.at) / 1000) : null;
-    el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span><span style="text-transform:none;letter-spacing:0">${age == null ? "loading…" : age < 10 ? "just updated" : `updated ${age}s ago`}</span></h3>${bets.map((b) => {
+    el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span><span style="text-transform:none;letter-spacing:0">${age == null ? "loading…" : age < 10 ? "just updated" : `updated ${age}s ago`}</span></h3>${state.liveErr ? `<div class="foot" style="margin:0 0 8px;color:var(--amber)">Live update failed: ${esc(state.liveErr)}. Retrying every minute.</div>` : ""}${bets.map((b) => {
       const rows = b.legs.map((l) => ({ l, n: legNow(l) })), known = rows.every((x) => x.n && x.n.chance != null);
       const all = known ? rows.reduce((a, x) => a * x.n.chance, 1) : null;
       return `<div class="lvbet"><div class="lvh"><b>${b.legs.length > 1 ? (isEntry(b) ? b.legs.length + "-pick entry" : b.legs.length + "-leg parlay") : esc(b.legs[0].label)}</b><span class="lvp" style="color:${all == null ? "inherit" : all >= 0.5 ? "var(--accent-2)" : all >= 0.2 ? "var(--amber)" : "var(--red)"}">${all == null ? "—" : pct(all)}</span></div>${rows.map(({ l, n }) => {
@@ -1237,8 +1237,8 @@
       bets.forEach((b) => b.legs.filter(liveWindow).forEach((l) => { const [away, home] = String(l.sub || "").split(" @ "); if (away && home) (by[l.league] = by[l.league] || new Map()).set(away + "|" + home, { away, home }); }));
       const live = { at: Date.now() };
       for (const [lg, games] of Object.entries(by)) live[lg] = await apiPost("/api/live", { league: lg, games: [...games.values()] }, 25000);
-      state.live = live;
-    } catch (_) { /* keep the last numbers; the next poll retries */ }
+      state.live = live; state.liveErr = null;
+    } catch (e) { state.liveErr = e.message; /* keep the last numbers; the next poll retries */ }
     polling = false; renderLive();
   }
   setInterval(pollLive, 60000);
@@ -1373,15 +1373,26 @@
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
     return Notification.permission; // default | granted | denied
   }
+  const sameKey = (a, b) => { if (!a || !b) return false; const x = new Uint8Array(a); return x.length === b.length && x.every((v, i) => v === b[i]); };
   async function enablePush() {
     if (!state.api) throw new Error("not-connected");
     const perm = await Notification.requestPermission();
     if (perm !== "granted") throw new Error("permission was not given");
     const { key } = await apiPost("/api/push/key", {});
-    const reg = await navigator.serviceWorker.ready;
-    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(key) }));
-    await apiPost("/api/push/subscribe", { subscription: sub.toJSON() });
+    if (!key) throw new Error("the server sent no notification key");
+    const appKey = b64u(key);
+    const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, no) => setTimeout(() => no(new Error("Archer's background worker isn't running: close Archer fully (swipe it away) and open it again from the Home Screen")), 8000))]);
+    // A subscription made with another server key (a re-install, a new server) blocks a new
+    // one on iOS: drop it and subscribe again (ADR-0044).
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && sub.options && sub.options.applicationServerKey && !sameKey(sub.options.applicationServerKey, appKey)) { await sub.unsubscribe().catch(() => {}); sub = null; }
+    if (!sub) {
+      try { sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey }); }
+      catch (e) { const old = await reg.pushManager.getSubscription(); if (!old) throw e; await old.unsubscribe().catch(() => {}); sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey }); }
+    }
+    const r = await apiPost("/api/push/subscribe", { subscription: sub.toJSON() });
     store.set("archer-push", true);
+    if (r && r.failures && r.failures.length) throw new Error(`registered, but the welcome didn't go through: ${r.failures[0]}`);
   }
   function notifSection() {
     const st = pushState(), on = st === "granted" && store.get("archer-push", false);
@@ -1393,8 +1404,8 @@
   }
   function bindNotif(root) {
     const on = $("#pushOn", root), test = $("#pushTest", root), msg = $("#pushMsg", root);
-    if (on) on.addEventListener("click", async () => { msg.textContent = "Asking…"; try { await enablePush(); msg.textContent = "Done — a welcome notification is on its way."; buzz(); } catch (e) { msg.textContent = `Couldn't turn them on: ${e.message}`; } });
-    if (test) test.addEventListener("click", async () => { try { const d = await apiPost("/api/push/test", {}); msg.textContent = d.sent ? "Sent." : "No phone registered yet."; } catch (e) { msg.textContent = e.message; } });
+    if (on) on.addEventListener("click", async () => { msg.textContent = "Asking…"; try { await enablePush(); msg.textContent = "Done — a welcome notification is on its way."; buzz(); } catch (e) { msg.textContent = `Couldn't turn them on: ${e.name && e.name !== "Error" ? e.name + " — " : ""}${e.message}`; } });
+    if (test) test.addEventListener("click", async () => { try { const d = await apiPost("/api/push/test", {}); msg.textContent = d.sent ? "Sent." : d.failures && d.failures.length ? `Not delivered: ${d.failures[0]}` : "No phone registered yet: tap Re-register this phone."; } catch (e) { msg.textContent = e.message; } });
   }
 
   // ---- line targets
