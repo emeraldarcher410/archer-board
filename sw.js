@@ -1,7 +1,7 @@
 // Network-first for everything on this origin: the board changes on every publish, and a
 // stale shell is worse than a slow one. The cache is only the offline fallback.
 // SHELL is stamped per publish by fm.reports.site.publish_site so old caches are purged.
-const SHELL = "archer-shell-20260926223253";
+const SHELL = "archer-shell-20260926230303";
 const ASSETS = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon.svg", "./icon-180.png", "./icon-192.png"];
 self.addEventListener("install", (e) => {
   // Each file on its own: one missing icon must not stop the worker installing (it is what
