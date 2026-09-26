@@ -766,19 +766,28 @@
     const stake = Math.max(0, Number($("#stake").value) || 0);
     const valid = legs.filter((l) => !l.dfs && Number.isFinite(Number(l.price)) && Math.abs(Number(l.price)) >= 100);
     if (!valid.length) { $("#calc").innerHTML = `<dt style="grid-column:1/-1;color:var(--ink-3)">Sportsbook legs you add show their combined odds here.</dt>`; return; }
-    const D = valid.reduce((a, l) => a * dec(Number(l.price)), 1), bookP = valid.reduce((a, l) => a * implied(Number(l.price)), 1);
-    const modelP = valid.every((l) => l.p != null) ? valid.reduce((a, l) => a * l.p, 1) : null;
+    // ADR-0045: Hard Rock prices a parlay itself (same-game parlays get their own odds, not
+    // the legs multiplied). Its quoted odds, when typed, set the payout; the model prices
+    // same-game legs together from historical correlations, like pick'em entries.
+    const legsD = valid.reduce((a, l) => a * dec(Number(l.price)), 1), quoted = parlayOdds();
+    const D = quoted ? dec(quoted) : legsD, bookP = valid.reduce((a, l) => a * implied(Number(l.price)), 1);
     const events = valid.map((l) => l.event).filter(Boolean), sameGame = events.length !== new Set(events).size;
+    const known = valid.every((l) => l.p != null), joint = known && sameGame && valid.length >= 2 ? jointEntry(valid) : null;
+    const modelP = known ? (joint ? joint.all : valid.reduce((a, l) => a * l.p, 1)) : null;
     const ev = modelP != null ? modelP * (D - 1) * stake - (1 - modelP) * stake : null;
-    $("#calc").innerHTML = `<dt>Parlay odds · ${valid.length} leg${valid.length > 1 ? "s" : ""}</dt><dd>${odds(toAmerican(D))} (${D.toFixed(2)}x)</dd>
+    const cut = quoted ? 1 - (D - 1) / (legsD - 1) : null;
+    $("#calc").innerHTML = `<dt>Parlay odds · ${valid.length} leg${valid.length > 1 ? "s" : ""}</dt><dd>${odds(toAmerican(D))} (${D.toFixed(2)}x)${quoted ? " · Hard Rock's" : ""}</dd>
+      ${quoted ? `<dt>Legs multiplied would pay</dt><dd>${odds(toAmerican(legsD))}${cut > 0.005 ? ` <small style="color:var(--ink-3)">(Hard Rock pays ${(cut * 100).toFixed(0)}% less profit)</small>` : ""}</dd>` : ""}
       <dt>Pays on $${stake.toFixed(2)}</dt><dd>$${(stake * D).toFixed(2)}</dd><dt>Needs to hit</dt><dd>${pct(1 / D, 1)}</dd>
-      <dt>Book's chance (with vig)</dt><dd>${pct(bookP, 1)}</dd><dt>Model's chance</dt><dd>${modelP == null ? "—" : pct(modelP, 1)}</dd>
+      <dt>Book's chance (with vig)</dt><dd>${pct(bookP, 1)}</dd><dt>Model's chance</dt><dd>${modelP == null ? "—" : pct(modelP, 1)}${joint ? ` <small style="color:var(--ink-3)">(linked legs; ${pct(joint.ind, 1)} if unrelated)</small>` : ""}</dd>
       <dt>Expected profit</dt><dd style="color:${ev == null ? "inherit" : ev >= 0 ? "var(--accent-2)" : "var(--red)"}">${ev == null ? "—" : (ev >= 0 ? "+$" : "−$") + Math.abs(ev).toFixed(2)}</dd>
-      ${sameGame ? `<dt class="w">Two legs share a game; books price same-game parlays with extra margin.</dt>` : ""}`;
+      ${sameGame && !quoted ? `<dt class="w">Same-game parlay: Hard Rock sets its own odds for these. Type the odds from your bet slip above for the real payout.</dt>` : ""}`;
   }
   $("#slip").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (!b) return; state.slip.splice(Number(b.dataset.rm), 1); saveSlip(); renderSlip(); renderProps(); });
   $("#slip").addEventListener("input", (e) => { const i = e.target.dataset.odds; if (i == null) return; state.slip[Number(i)].price = Number(e.target.value); saveSlip(); renderSlip(); });
   $("#stake").addEventListener("input", renderSlip);
+  function parlayOdds() { const el = $("#parlayOdds"); const v = Number(String(el ? el.value : "").replace(/[^0-9+-]/g, "")); return Number.isFinite(v) && Math.abs(v) >= 100 ? v : null; }
+  $("#parlayOdds").addEventListener("input", renderSlip);
   $("#addManual").addEventListener("click", () => {
     const label = $("#manualLabel").value.trim(), price = Number($("#manualOdds").value);
     if (!label || !Number.isFinite(price) || Math.abs(price) < 100) { toast("Enter a description and odds like -110 or +150"); return; }
@@ -818,8 +827,10 @@
     }
     if (picks.length) { toast("Track pick'em picks and sportsbook legs separately"); return; }
     if (!legs.length) { toast("The slip is empty"); return; }
-    state.bets.unshift(newBet(legs, Math.max(0, Number($("#stake").value) || 0)));
-    state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); renderProps(); toast("Parlay tracked");
+    const q = parlayOdds();
+    state.bets.unshift(newBet(legs, Math.max(0, Number($("#stake").value) || 0), q ? dec(q) : undefined));
+    $("#parlayOdds").value = "";
+    state.slip = []; saveSlip(); saveBets(); renderSlip(); renderBets(); renderProps(); toast(q ? `Parlay tracked at ${odds(q)}` : "Parlay tracked");
   });
   $("#trackSingles").addEventListener("click", () => {
     const legs = state.slip.filter((l) => !l.dfs && Math.abs(Number(l.price)) >= 100);
@@ -864,9 +875,15 @@
     if (b.status === "lost") return 0;
     if (b.status === "push" || b.status === "void") return b.stake;
     if (isEntry(b)) return b.stake * dec(Number(b.odds));
-    return b.stake * b.legs.filter((l) => l.result !== "push" && l.result !== "void").reduce((a, l) => a * dec(Number(l.price)), 1);
+    // ADR-0045: the bet's own odds (Hard Rock's quoted parlay price, from the Slip or the
+    // receipt), not the legs multiplied: same-game parlays pay less than the product. A
+    // pushed or void leg scales the profit by what that leg contributed.
+    const all = b.legs.reduce((a, l) => a * dec(Number(l.price)), 1);
+    const live = b.legs.filter((l) => l.result !== "push" && l.result !== "void").reduce((a, l) => a * dec(Number(l.price)), 1);
+    const D = Math.abs(Number(b.odds)) >= 100 ? dec(Number(b.odds)) : all;
+    return b.stake * (live === all || all <= 1 ? D : 1 + (D - 1) * (live - 1) / (all - 1));
   }
-  const toWin = (b) => (isEntry(b) ? b.stake * (dec(Number(b.odds)) - 1) : b.stake * (b.legs.reduce((a, x) => a * dec(Number(x.price)), 1) - 1));
+  const toWin = (b) => b.stake * ((Math.abs(Number(b.odds)) >= 100 ? dec(Number(b.odds)) : b.legs.reduce((a, x) => a * dec(Number(x.price)), 1)) - 1);
   function countUp(el) { $$("[data-count]", el).forEach((n) => { const to = Number(n.dataset.count), pre = n.dataset.pre || "", suf = n.dataset.suf || "", d = Number(n.dataset.d || 0); let t0 = null; const step = (ts) => { t0 = t0 || ts; const k = Math.min(1, (ts - t0) / 500); n.textContent = pre + (to * (1 - (1 - k) ** 3)).toFixed(d) + suf; if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); }); }
   function renderBets() {
     state.bets.forEach(settle); saveBets(); renderBankroll();
