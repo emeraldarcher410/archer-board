@@ -175,6 +175,7 @@
       name_key: normName(r.player_ref), stat: STAT_OF[r.market] || null, side: r.side, line: r.line, market: r.market, book: r.book,
       price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10), kick: r.commence_time,
       dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null, team: r.form_team,
+      mean: r.proj_mean ?? r.form_mean ?? null, sd: r.proj_sd ?? r.form_sd ?? null, // sweat mode's pre-game projection
     };
   }
 
@@ -915,6 +916,219 @@
   $("#refreshPill").addEventListener("click", () => location.reload());
   $("#reloadBtn").addEventListener("click", () => location.reload());
 
+  // ------------------------------------------------------------------ phone API (ADR-0037)
+  // The server is optional: without it the board works as before. Pairing trades the 6-digit
+  // code from `fm api pair` for the passcode, kept on this phone only.
+  state.api = store.get("archer-api", null);
+  state.chat = store.get("archer-chat", []);
+  const apiUrl = () => (state.api && state.api.url) || (state.meta && state.meta.api_url) || "";
+  async function apiPost(path, body, timeout = 30000) {
+    if (!state.api || !state.api.token) throw new Error("not-connected");
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const r = await fetch(state.api.url + path, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + state.api.token }, body: JSON.stringify(body || {}), signal: ctl.signal });
+      if (r.status === 401) { state.api = null; store.set("archer-api", null); throw new Error("not-connected"); }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok && !data.answer) throw new Error(data.error || `HTTP ${r.status}`);
+      return data;
+    } catch (e) { throw e.name === "AbortError" ? new Error("timed out") : e; } finally { clearTimeout(t); }
+  }
+  const copy = (text, what) => { try { navigator.clipboard.writeText(text).then(() => toast(`${what} copied`)); } catch (_) { toast("Copy not available"); } };
+  function connectHtml(why) {
+    return `<div class="pair"><p>${why} Connect this phone to your Archer server once: on the server run <code>uv run fm api pair</code>, then type the code.</p>
+      <div class="field">Server<input class="inp" id="pairUrl" value="${esc(apiUrl())}" placeholder="https://…sslip.io" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="field">6-digit code<input class="inp code" id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000"></div>
+      <button class="btn primary" id="pairGo" style="width:100%">Connect</button><div class="foot" id="pairMsg" style="margin:10px 0 0"></div></div>`;
+  }
+  function bindConnect(root, done) {
+    const go = async () => {
+      const url = $("#pairUrl", root).value.trim().replace(/\/+$/, ""), code = $("#pairCode", root).value.replace(/\D/g, "");
+      const msg = $("#pairMsg", root);
+      if (!/^https:\/\//.test(url)) { msg.textContent = "The server address starts with https://"; return; }
+      if (code.length !== 6) { msg.textContent = "Type the 6 digits from `fm api pair`."; return; }
+      msg.textContent = "Connecting…";
+      try {
+        const r = await fetch(url + "/api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.token) { msg.textContent = d.error ? `${d.error}${d.tries_left != null ? ` (${d.tries_left} tries left)` : ""}` : `Server said ${r.status}`; return; }
+        state.api = { url, token: d.token }; store.set("archer-api", state.api); buzz(); toast("Connected to your server"); done();
+      } catch (_) { msg.textContent = "Couldn't reach that address. Is the server set up (scripts/setup_api.sh)?"; }
+    };
+    $("#pairGo", root).addEventListener("click", go);
+    $("#pairCode", root).addEventListener("input", (e) => { if (e.target.value.replace(/\D/g, "").length === 6) go(); });
+  }
+
+  // ---- Ask Archer
+  function md(text) { // **bold** and "- " bullets only; everything escaped first
+    const inl = (x) => x.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    let html = "", list = false;
+    for (const raw of esc(text).split("\n")) {
+      const m = raw.match(/^\s*[-•*]\s+(.*)$/);
+      if (m) { if (!list) { html += "<ul>"; list = true; } html += `<li>${inl(m[1])}</li>`; continue; }
+      if (list) { html += "</ul>"; list = false; }
+      if (raw.trim()) html += `<p>${inl(raw)}</p>`;
+    }
+    return html + (list ? "</ul>" : "");
+  }
+  function suggestions() {
+    const lg = state.league === "cfb" ? "college" : "NFL", out = [`Best 3-pick on PrizePicks for ${lg} right now`, `Strongest unders on the ${lg} board`, "Who gains volume from injuries this week?"];
+    if (state.slip.length) out.unshift("Is my slip any good? What would you swap?");
+    return out;
+  }
+  function openAsk(prefill) {
+    const s = openSheet(`<div class="sh-top"><h2>Ask Archer</h2><div class="r"><button class="btn small ghost" id="chatNew">New</button><button class="btn small" data-close>Done</button></div></div><div id="askBody"></div>`, true);
+    $("#chatNew", s).addEventListener("click", () => { state.chat = []; store.set("archer-chat", []); renderAsk(s); });
+    renderAsk(s, prefill);
+  }
+  function renderAsk(s, prefill) {
+    const body = $("#askBody", s);
+    if (!state.api) { body.innerHTML = connectHtml("Ask Archer answers questions about the board using Claude."); bindConnect(body, () => renderAsk(s, prefill)); return; }
+    const msgs = state.chat.map((m) => `<div class="msg ${m.role === "user" ? "u" : "a"}">${m.role === "user" ? esc(m.text) : md(m.text)}${m.meta ? `<span class="mt">${esc(m.meta)}</span>` : ""}</div>`).join("");
+    body.innerHTML = `<div class="chat" id="chat">${state.chat.length ? msgs : `<div class="note-card">Ask about tonight's board in plain English. Archer looks things up on the board and answers with its numbers — Claude Opus 5, a few cents a question, capped monthly on the server.</div>`}
+      ${state.chat.length ? "" : `<div class="sugg">${suggestions().map((q) => `<button data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}</div>
+      <form class="composer" id="askForm"><textarea id="askIn" rows="1" placeholder="Ask about the board…" enterkeyhint="send">${esc(prefill || "")}</textarea><button class="btn primary" aria-label="Send">↑</button></form>`;
+    const inp = $("#askIn", body), form = $("#askForm", body);
+    const grow = () => { inp.style.height = "auto"; inp.style.height = Math.min(120, inp.scrollHeight) + "px"; };
+    inp.addEventListener("input", grow);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+    form.addEventListener("submit", (e) => { e.preventDefault(); const q = inp.value.trim(); if (q) sendAsk(s, q); });
+    $$("[data-q]", body).forEach((b) => b.addEventListener("click", () => sendAsk(s, b.dataset.q)));
+    const sc = $(".in", s); sc.scrollTop = sc.scrollHeight;
+  }
+  let asking = false;
+  async function sendAsk(s, q) {
+    if (asking) return; asking = true;
+    const history = state.chat.slice(-8).map((m) => ({ role: m.role, text: m.text }));
+    state.chat.push({ role: "user", text: q }); renderAsk(s);
+    $("#chat", s).insertAdjacentHTML("beforeend", `<div class="msg a" id="typing"><span class="typing"><i></i><i></i><i></i></span></div>`);
+    const sc = $(".in", s); sc.scrollTop = sc.scrollHeight;
+    try {
+      const d = await apiPost("/api/ask", { question: q, history, league: state.league, slip: state.slip.map((l) => ({ label: `${l.label}${l.app ? " (" + l.app + ")" : ""}` })) }, 150000);
+      const meta = d.cost_usd != null ? `Opus 5 · ${(d.cost_usd * 100).toFixed(1)}¢ · $${(d.month_usd ?? 0).toFixed(2)} of $${(d.cap_usd ?? 0).toFixed(0)} this month` : "";
+      state.chat.push({ role: "assistant", text: d.answer || "No answer.", meta });
+    } catch (e) {
+      state.chat.push({ role: "assistant", text: e.message === "not-connected" ? "The server passcode was rejected; connect again." : `Couldn't get an answer (${e.message}).` });
+    }
+    state.chat = state.chat.slice(-30); store.set("archer-chat", state.chat); asking = false;
+    if (sheetEl === s) renderAsk(s);
+  }
+  $("#askBtn").addEventListener("click", () => { buzz(); openAsk(); });
+
+  // ---- slip check
+  const rowFor = (x) => state.rows.find((r) => r.player_ref === x.player && r.market === x.market && r.side === x.side && Number(r.line) === Number(x.board_line ?? x.line) && (!x.book || r.book === x.book));
+  function openCheck() {
+    const s = openSheet(`<div class="sh-top"><h2>Check a slip</h2><button class="btn small" data-close>Done</button></div><div id="ckBody"></div>`);
+    renderCheck(s);
+  }
+  function shortcutHelp() {
+    const url = state.api ? state.api.url : apiUrl();
+    return `<details class="howto"><summary>Set up one-tap checking from a screenshot</summary><ol>
+      <li>Open <b>Shortcuts</b> → <b>+</b>, name it <b>Archer check</b>. Tap ⓘ, turn on <b>Show in Share Sheet</b>, and accept <b>Images</b>.</li>
+      <li>Add <b>Extract Text from Image</b> (input: Shortcut Input).</li>
+      <li>Add <b>Get Contents of URL</b>: URL <code>${esc(url)}/api/check?format=text</code> <button class="btn small" data-copy="url">Copy</button>; Method <b>POST</b>; add header <b>Authorization</b> = <code>Bearer ••••</code> <button class="btn small" data-copy="auth">Copy</button>; Request Body <b>JSON</b> with key <b>text</b> = <i>Extracted Text</i>.</li>
+      <li>Add <b>Show Result</b>.</li></ol>
+      <p style="font-size:13px;color:var(--ink-3)">Then: screenshot your PrizePicks / Underdog / Hard Rock slip → tap the preview → Share → <b>Archer check</b>. The answer pops up without leaving the app. The passcode works like a password — keep the shortcut to yourself.</p></details>`;
+  }
+  function renderCheck(s, res, text) {
+    const body = $("#ckBody", s);
+    if (!state.api) { body.innerHTML = connectHtml("Slip check reads a screenshot's text and prices it against the board."); bindConnect(body, () => renderCheck(s)); return; }
+    body.innerHTML = `<p style="margin-top:0;color:var(--ink-2);font-size:14px">Open your screenshot, press and hold on the text, <b>Select All</b>, <b>Copy</b>, then paste here.</p>
+      <textarea class="inp" id="ckText" style="height:120px;padding:10px;resize:vertical" placeholder="Paste the slip text…">${esc(text || "")}</textarea>
+      <div class="actions" style="margin-top:10px"><button class="btn" id="ckPaste">Paste</button><button class="btn primary grow" id="ckGo">Check it</button></div>
+      <div id="ckRes" style="margin-top:14px">${res ? checkResult(res) : ""}</div>${shortcutHelp()}`;
+    $("#ckPaste", body).addEventListener("click", async () => { try { $("#ckText", body).value = await navigator.clipboard.readText(); } catch (_) { toast("Long-press the box and tap Paste"); } });
+    $("#ckGo", body).addEventListener("click", async () => {
+      const t = $("#ckText", body).value.trim(); if (!t) { toast("Paste the slip text first"); return; }
+      $("#ckRes", body).innerHTML = `<div class="empty" style="padding:18px"><span class="typing"><i></i><i></i><i></i></span></div>`;
+      try { const r = await apiPost("/api/check", { text: t }); state.check = r; renderCheck(s, r, t); }
+      catch (e) { $("#ckRes", body).innerHTML = `<div class="note-card">Couldn't check it (${esc(e.message)}).</div>`; }
+    });
+    body.addEventListener("click", (e) => {
+      const c = e.target.closest("[data-copy]"); if (c) { copy(c.dataset.copy === "url" ? `${state.api.url}/api/check?format=text` : `Bearer ${state.api.token}`, c.dataset.copy === "url" ? "Address" : "Passcode"); return; }
+      const a = e.target.closest("[data-ckadd]"); if (!a || !state.check) return;
+      const k = a.dataset.ckadd, list = k === "all" ? state.check.legs : k.startsWith("s") ? [state.check.swaps[Number(k.slice(1))]] : [state.check.legs[Number(k)]];
+      let n = 0; list.forEach((x) => { const r = x && rowFor(x); if (r && !inSlip(r)) { state.slip.push(propLeg(r)); n++; } });
+      saveSlip(); renderSlip(); renderProps(); toast(n ? `Added ${n} to your slip` : "Nothing new to add");
+    });
+  }
+  function checkResult(r) {
+    if (!r.legs.length) return `<div class="note-card">No board players found in that text. Copy the entry screen with names, lines and More/Less showing.</div>`;
+    const e = r.entry, sd = (x) => (x === "over" ? "O" : x === "under" ? "U" : "?");
+    const head = e ? `<div class="ck-head"><span>${esc(r.app_name || "Entry")} · ${r.legs.length} picks</span><b>${pct(e.p_all, 1)}</b></div><div class="foot" style="margin:0 0 6px">chance all hit (legs treated as independent${e.same_game ? "; two share a game, so it's rougher" : ""})</div>
+      ${e.options.map((o) => `<div class="ck-opt"><span>${o.kind} · pays ${o.pays}x</span><span class="${o.ev >= 0 ? "pos" : "neg"}">${o.ev >= 0 ? "+" : ""}${(o.ev * 100).toFixed(0)}% expected</span></div>`).join("")}` : `<div class="ck-head"><span>${esc(r.app_name || "Slip")} · ${r.legs.length} found</span></div>`;
+    const legs = r.legs.map((l, i) => `<div class="ck-leg"><span class="mk2 ${l.p == null ? "p" : l.clears ? "w" : "l"}">${l.p == null ? "?" : l.clears ? "✓" : "✗"}</span>
+      <div><b>${esc(l.player)}</b> ${sd(l.side)} ${l.line ?? l.board_line ?? "?"} ${esc(l.market_label || "")}<small>${l.p != null ? `best estimate ${pct(l.p)} · needs ${pct(l.be)}${l.fav ? " · ★ favorite" : ""}` : "not priced"}</small>${l.notes.length ? `<small class="n">${esc(l.notes.join(" · "))}</small>` : ""}</div>
+      ${rowFor(l) ? `<button class="btn small" data-ckadd="${i}">+</button>` : "<span></span>"}</div>`).join("");
+    const sw = r.swaps.length ? `<h3 style="margin-top:14px">Swap out ${esc(r.weakest)} for</h3>${r.swaps.map((x, i) => `<div class="ck-leg"><span>${x.fav ? "★" : ""}</span><div><b>${esc(x.player)}</b> ${sd(x.side)} ${x.line} ${esc(x.market_label || "")}<small>${pct(x.p)}${x.same_game ? " · same game as another pick" : " · different game"}</small></div>${rowFor(x) ? `<button class="btn small" data-ckadd="s${i}">+</button>` : "<span></span>"}</div>`).join("")}` : "";
+    return `<div class="panel">${head}${legs}${sw}<div class="actions" style="margin-top:10px"><button class="btn small" data-ckadd="all">Add all to my slip</button></div><div class="foot" style="margin:8px 0 0">Unvalidated heuristics — bet small.</div></div>`;
+  }
+  $("#checkBtn").addEventListener("click", openCheck);
+
+  // ---- sweat mode: open bets' games, live
+  const normCdf = (z) => { const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(z * z) / 2); return z >= 0 ? (1 + y) / 2 : (1 - y) / 2; };
+  const invNorm = (p) => { p = Math.min(0.999, Math.max(0.001, p)); let lo = -5, hi = 5; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (normCdf(m) < p) lo = m; else hi = m; } return (lo + hi) / 2; };
+  const teamKey = (x) => String(x || "").toLowerCase().replace(/[^a-z]/g, "");
+  const liveWindow = (l) => { const k = Date.parse(l.kick || ""); return l.kind === "prop" && k && Date.now() >= k - 5 * 60000 && Date.now() <= k + 5 * 3600000; };
+  function liveBets() { return state.bets.filter((b) => b.status === "open" && b.legs.some(liveWindow)); }
+  function legGame(l) {
+    const box = state.live && state.live[l.league]; if (!box) return null;
+    const [away, home] = String(l.sub || "").split(" @ ").map(teamKey);
+    return box.games.find((g) => teamKey(g.away) === away && teamKey(g.home) === home) || null;
+  }
+  function legNow(l) {
+    const g = legGame(l); if (!g) return null;
+    const box = state.live[l.league], pl = box.players[l.name_key], stat = l.market === "player_anytime_td" ? "td" : l.stat;
+    const cur = pl && pl.stats[stat] != null ? pl.stats[stat] : g.state === "pre" ? null : 0, f = g.remaining ?? 1;
+    let chance = null;
+    if (cur != null && stat) {
+      if (stat === "td") chance = cur >= 1 ? 1 : f <= 0 ? 0 : 1 - Math.pow(1 - (l.p ?? 0.3), f);
+      else if (f <= 0 || (l.side === "over" && cur > l.line)) chance = (l.side === "over" ? cur > l.line : cur < l.line) ? 1 : 0;
+      else if (l.side === "under" && cur >= l.line) chance = 0;
+      else {
+        let sd = l.sd || Math.max(1, 0.45 * l.line), mean = l.mean;
+        if (mean == null) { const z = invNorm(l.p ?? 0.5); mean = l.side === "over" ? l.line + sd * z : l.line - sd * z; }
+        const mu = cur + mean * f, s2 = Math.max(0.5, sd * Math.sqrt(f)), over = 1 - normCdf((l.line - mu) / s2);
+        chance = l.side === "over" ? over : 1 - over;
+      }
+    } else if (g.state === "pre") chance = l.p ?? null;
+    return { g, cur, chance };
+  }
+  function renderLive() {
+    const bets = liveBets(), el = $("#live");
+    $('.tabbar [data-tab="bets"]').classList.toggle("live", bets.length > 0);
+    if (!el) return;
+    if (!bets.length) { el.innerHTML = ""; return; }
+    if (!state.api) { el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span></h3><p style="margin:0 0 10px;font-size:14px">${bets.length} open bet${bets.length > 1 ? "s are" : " is"} in play. Connect your server to sweat them here with live stats.</p><button class="btn small" id="liveConnect">Connect</button></div>`; $("#liveConnect").addEventListener("click", () => { const s = openSheet(`<div class="sh-top"><h2>Connect</h2><button class="btn small" data-close>Done</button></div><div id="cb"></div>`); $("#cb", s).innerHTML = connectHtml(""); bindConnect($("#cb", s), () => { closeSheet(); pollLive(); }); }); return; }
+    const age = state.live && state.live.at ? Math.round((Date.now() - state.live.at) / 1000) : null;
+    el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span><span style="text-transform:none;letter-spacing:0">${age == null ? "loading…" : age < 10 ? "just updated" : `updated ${age}s ago`}</span></h3>${bets.map((b) => {
+      const rows = b.legs.map((l) => ({ l, n: legNow(l) })), known = rows.every((x) => x.n && x.n.chance != null);
+      const all = known ? rows.reduce((a, x) => a * x.n.chance, 1) : null;
+      return `<div class="lvbet"><div class="lvh"><b>${b.legs.length > 1 ? (isEntry(b) ? b.legs.length + "-pick entry" : b.legs.length + "-leg parlay") : esc(b.legs[0].label)}</b><span class="lvp" style="color:${all == null ? "inherit" : all >= 0.5 ? "var(--accent-2)" : all >= 0.2 ? "var(--amber)" : "var(--red)"}">${all == null ? "—" : pct(all)}</span></div>${rows.map(({ l, n }) => {
+        const cur = n && n.cur != null ? n.cur : null, mx = Math.max(l.line * 1.35, cur || 0, 1), c = n ? n.chance : null;
+        const cls = c == null ? "" : c >= 0.5 ? "" : c >= 0.2 ? "warn" : "bad";
+        return `<div class="lvleg"><div class="nm">${esc(l.label)}<span>${n && n.g ? esc(n.g.state === "pre" ? "not started" : n.g.detail) : "no live data"}</span></div>
+          <div class="lvbar"><i class="${cls}" style="width:${cur == null ? 0 : Math.min(100, (cur / mx) * 100)}%"></i><u style="left:${(l.line / mx) * 100}%"></u></div>
+          <div class="st"><span>${cur == null ? "—" : cur} / ${l.line}</span><span>${c == null ? "" : c >= 1 ? "✓ hit" : c <= 0 ? "✗ dead" : pct(c) + " to hit"}</span></div></div>`;
+      }).join("")}</div>`;
+    }).join("")}<div class="foot" style="margin:6px 0 0">Live chance = stats so far plus the pre-game projection for the time left. Rough; independent legs.</div></div>`;
+  }
+  let polling = false;
+  async function pollLive() {
+    const bets = liveBets(); renderLive();
+    if (!bets.length || !state.api || document.hidden || polling) return;
+    polling = true;
+    try {
+      const by = {};
+      bets.forEach((b) => b.legs.filter(liveWindow).forEach((l) => { const [away, home] = String(l.sub || "").split(" @ "); if (away && home) (by[l.league] = by[l.league] || new Map()).set(away + "|" + home, { away, home }); }));
+      const live = { at: Date.now() };
+      for (const [lg, games] of Object.entries(by)) live[lg] = await apiPost("/api/live", { league: lg, games: [...games.values()] }, 25000);
+      state.live = live;
+    } catch (_) { /* keep the last numbers; the next poll retries */ }
+    polling = false; renderLive();
+  }
+  setInterval(pollLive, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
+
   // ------------------------------------------------------------------ tabs, league, data
   function show(tab) {
     state.tab = tab;
@@ -923,7 +1137,7 @@
     $("#leagueSeg").style.visibility = ["props", "games", "record"].includes(tab) ? "visible" : "hidden";
     store.set("archer-tab", tab);
     if (tab === "slip") renderSlip();
-    if (tab === "bets") renderBets();
+    if (tab === "bets") { renderBets(); pollLive(); }
     if (tab === "record") renderRecord();
     moveInd();
     window.scrollTo({ top: 0 });
@@ -981,6 +1195,7 @@
   saveSlip();
   const saved = store.get("archer-tab", "props");
   show(["props", "games", "slip", "bets", "record"].includes(saved) ? saved : "props");
+  pollLive(); // the Bets tab's live dot, and live numbers if a bet is in play
 
   if ("serviceWorker" in navigator) {
     let had = !!navigator.serviceWorker.controller;

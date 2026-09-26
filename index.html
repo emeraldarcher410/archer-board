@@ -502,6 +502,50 @@
   .splash .w { text-align: center; margin-top: 16px; color: #EAF0F7; font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .18em; }
   .splash .w span { display: block; font-family: Inter, sans-serif; font-size: 11px; letter-spacing: .4em; color: #34D399; font-weight: 600; margin-top: 4px; }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* phone API (ADR-0037): Ask Archer, slip check, live sweat */
+  .fab { position: fixed; right: 14px; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 45; width: 54px; height: 54px; padding: 0; justify-content: center; border-radius: 50%; border: 0; display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; color: var(--accent-ink); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 14px 30px -10px rgba(16,185,129,.75), 0 2px 6px rgba(0,0,0,.25); }
+  .fab svg { width: 26px; height: 26px; }
+  .fab span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .fab:active { transform: scale(.95); }
+  body.locked .fab { display: none; }
+  .chat { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 90px; }
+  .msg { max-width: 88%; padding: 10px 13px; border-radius: 18px; font-size: 15px; line-height: 1.45; animation: fade .2s ease; }
+  .msg p { margin: 0 0 6px; } .msg p:last-child { margin: 0; }
+  .msg ul { margin: 4px 0; padding-left: 18px; } .msg li { margin: 3px 0; }
+  .msg.u { align-self: flex-end; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); border-bottom-right-radius: 6px; }
+  .msg.a { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+  .msg .mt { display: block; margin-top: 6px; font-size: 11px; color: var(--ink-3); }
+  .typing { display: inline-flex; gap: 4px; padding: 4px 2px; } .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); animation: pulse 1s infinite; } .typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+  .sugg { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+  .sugg button { border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); border-radius: 14px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; text-align: left; }
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+  .composer textarea { flex: 1; resize: none; max-height: 120px; min-height: 44px; border: 1px solid var(--line-2); border-radius: 22px; background: var(--surface-2); color: var(--ink); padding: 11px 15px; font: inherit; font-size: 16px; outline: none; }
+  .composer .btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; padding: 0; font-size: 20px; }
+  .pair .code { font-family: var(--display); font-size: 34px; letter-spacing: .3em; text-align: center; height: 62px; }
+  .ck-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ck-head b { font-family: var(--display); font-size: 26px; }
+  .ck-leg { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .ck-leg small { display: block; color: var(--ink-3); font-size: 12px; }
+  .ck-leg .n { color: var(--amber); }
+  .ck-opt { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+  .ck-opt .pos { color: var(--accent-2); font-weight: 800; } .ck-opt .neg { color: var(--red); font-weight: 800; }
+  details.howto summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+  details.howto ol { padding-left: 20px; line-height: 1.6; font-size: 14px; }
+  details.howto code { word-break: break-all; }
+  .live h3 .dot2 { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 6px; animation: pulse 1.2s infinite; }
+  .lvbet { padding: 10px 0; border-top: 1px solid var(--line); } .lvbet:first-of-type { border-top: 0; padding-top: 0; }
+  .lvh { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .lvh b { font-size: 15px; } .lvh .lvp { font-family: var(--display); font-size: 22px; font-weight: 800; }
+  .lvleg { margin: 8px 0; }
+  .lvleg .nm { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 600; }
+  .lvleg .nm span { color: var(--ink-3); font-weight: 600; font-size: 12px; }
+  .lvbar { position: relative; height: 8px; border-radius: 4px; background: var(--track); margin: 6px 0 3px; overflow: visible; }
+  .lvbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent-2); transition: width .6s ease; }
+  .lvbar i.warn { background: var(--amber); } .lvbar i.bad { background: var(--red); }
+  .lvbar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .lvleg .st { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+  .tabbar button.live::before { content: ""; position: absolute; top: 9px; left: calc(50% + 9px); width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: pulse 1.2s infinite; }
   @media (min-width: 720px) { .kpi b { font-size: 26px; } .top { flex-basis: 300px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
@@ -577,6 +621,7 @@
 
   <section id="slipView" class="view hidden">
     <div class="page-h"><h1>Slip</h1><span class="sub">parlays &amp; pick'em entries</span></div>
+    <button class="btn grow" id="checkBtn" style="width:100%;margin-bottom:12px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>Check a slip screenshot</button>
     <div class="panel"><h3><span>Legs</span><button class="btn small ghost danger" id="clearSlip" style="min-height:26px">Clear</button></h3><div id="slip"></div></div>
     <div id="builder"></div>
     <div class="panel">
@@ -598,6 +643,7 @@
   <section id="betsView" class="view hidden">
     <div class="page-h"><h1>My bets</h1><span class="sub">graded automatically</span></div>
     <div class="kpis" id="betSummary"></div>
+    <div id="live"></div>
     <div class="chips" id="betFilters" role="group" aria-label="Bet status" style="margin-bottom:10px">
       <button class="chip" data-bets="open" aria-pressed="true">Open</button>
       <button class="chip" data-bets="settled" aria-pressed="false">Settled</button>
@@ -630,6 +676,7 @@
   <div class="foot" id="stamp"></div>
 </div>
 
+<button class="fab" id="askBtn" aria-label="Ask Archer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z"/><path d="M19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z" opacity=".75"/></svg><span>Ask Archer</span></button>
 <nav class="tabbar" role="tablist" aria-label="Sections">
   <div class="wrap"><span class="ind" id="tabInd"></span>
     <button role="tab" data-tab="props" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>Props</button>
