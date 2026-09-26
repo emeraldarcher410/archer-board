@@ -458,6 +458,7 @@
           ${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? `<div style="font-size:12px;font-weight:700;margin-top:2px">Suggested stake $${stakeFor(r.p_model, r.price)}</div>` : ""}</div>
         ${ring(r.p_model, be)}</div>
       ${glancePanel(r)}
+      ${ranksPanel(r)}
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
       <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
       ${r.form_sd ? `<div class="panel"><h3><span>Projection range</span><span style="text-transform:none;letter-spacing:0">shaded = your side</span></h3>${curveChart(r.proj_mean ?? r.form_mean, r.proj_sd || r.form_sd, Number(r.line), r.side, marks)}</div>` : ""}
@@ -1371,6 +1372,10 @@
     const hr = open.filter((r) => !r.dfs && leagueOf(r) === "nfl").sort((a, b) => (b.fav - a.fav) || ((b.off_market ? 1 : 0) - (a.off_market ? 1 : 0)) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 5);
     const soon = Date.now() + 40 * 3600000;
     const cfb = open.filter((r) => r.dfs && leagueOf(r) === "cfb" && Date.parse(r.commence_time) < soon).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 4);
+    const seenSpot = new Set();
+    const spots = open.filter((r) => r.rank_head && (r.matchup_score ?? 0) >= 0.8 && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && (r.p_model ?? 0) >= (r.breakeven_p ?? 0.524) - 0.03)
+      .sort((a, b) => (b.matchup_score - a.matchup_score) || ((b.edge ?? -1) - (a.edge ?? -1)))
+      .filter((r) => { const k = r.player_ref + r.market; if (seenSpot.has(k)) return false; seenSpot.add(k); return true; }).slice(0, 5);
     const offm = open.filter((r) => r.off_market && !r.dfs).sort((a, b) => b.market_edge - a.market_edge).slice(0, 3);
     const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
     const byKey = new Map(state.rows.map((r) => [rowKey(r), r]));
@@ -1384,6 +1389,7 @@
       state.bank && state.bank.roll ? sec("Your day", `<div class="trow" data-go-bets><span></span><div><b style="color:${m.pl >= 0 ? "var(--accent-2)" : "var(--red)"}">${m.pl >= 0 ? "+" : "−"}$${Math.abs(m.pl).toFixed(2)}</b><small>$${m.open.toFixed(0)} in play · ${m.n} bet${m.n === 1 ? "" : "s"} today${state.bank.limit ? ` · limit $${state.bank.limit}` : ""}</small></div><div class="pv">›</div></div>`) : "",
       sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
       cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
+      spots.length ? sec("Best matchup spots", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head)}</span>${chgTags(r)}`)).join("")) : "",
       offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
       sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
       moves.length ? sec(`Biggest moves${state.meta.movers[0] && parseStamp(state.meta.movers[0].since) ? " · since " + parseStamp(state.meta.movers[0].since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}`, moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("")) : "",
@@ -1417,6 +1423,73 @@
     });
   })();
 
+  // ------------------------------------------------------------------ ADR-0040: rankings
+  state.gseg = "games"; state.rcat = store.get("archer-rcat", "rush_def"); state.rankings = null;
+  const ordinal = (n) => { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  const fmtVal = (v, f) => (v == null ? "—" : f === "epa" ? (v >= 0 ? "+" : "") + Number(v).toFixed(3) : f === "pct" ? pct(v, 1) : f === "ypr" ? Number(v).toFixed(2) : Number(v).toFixed(1));
+  const rkCls = (rank, of) => (rank <= Math.max(3, Math.round(of * 0.15)) ? "top" : of - rank < Math.max(3, Math.round(of * 0.15)) ? "bot" : "");
+  function rankBlock(lg) { return state.rankings && state.rankings.leagues && state.rankings.leagues[lg || state.league]; }
+  function teamRanks(lg, team) {
+    const b = rankBlock(lg); if (!b) return [];
+    return b.categories.map((c) => { const r = c.rows.find((x) => x.team === team); return r ? { c, r, of: c.rows.length } : null; }).filter(Boolean);
+  }
+  function nextGame(lg, team) {
+    const all = ((lg === "cfb" ? state.games.cfb_games : state.games.games) || []).filter((g) => g.home === team || g.away === team);
+    all.sort((a, b) => String(a.kickoff_utc).localeCompare(String(b.kickoff_utc)));
+    const g = all.find((x) => !when(x.kickoff_utc).locked) || all[0];
+    return g ? { g, opp: g.home === team ? g.away : g.home, home: g.home === team } : null;
+  }
+  function renderRankings() {
+    const el = $("#ranksPane"), lg = state.league, b = rankBlock(lg);
+    if (!b || !b.categories || !b.categories.length) { el.innerHTML = `<div class="empty" style="margin-top:12px"><b>No rankings yet</b>They publish with the next board.</div>`; return; }
+    if (!b.categories.some((c) => c.key === state.rcat)) state.rcat = b.categories[0].key;
+    const cat = b.categories.find((c) => c.key === state.rcat), of = cat.rows.length;
+    const vals = cat.rows.map((r) => r.value), lo = Math.min(...vals), hi = Math.max(...vals);
+    const groups = [...new Set(b.categories.map((c) => c.group))];
+    el.innerHTML = `<div class="page-h"><h1>Rankings</h1><span class="sub">${b.through_week ? `through week ${b.through_week}` : ""}</span></div>
+      <div class="rk-cats">${groups.map((g) => `<span class="rk-grp">${esc(g)}</span>` + b.categories.filter((c) => c.group === g).map((c) => `<button class="chip" data-rcat="${c.key}" aria-pressed="${c.key === state.rcat}">${esc(c.label)}</button>`).join("")).join("")}</div>
+      <div class="panel"><h3><span>${esc(cat.label)}</span><span style="text-transform:none;letter-spacing:0">${esc(cat.unit)}${cat.better ? ` · ${cat.better === "low" ? "lower" : "higher"} is better` : ""}</span></h3>
+        ${cat.rows.map((r) => { const t = team(lg, r.team), nx = nextGame(lg, r.team); const w = hi > lo ? ((cat.better === "low" ? hi - r.value : r.value - lo) / (hi - lo)) * 100 : 50;
+          return `<div class="rk-row" data-team="${esc(r.team)}"><span class="rk-n ${cat.better ? rkCls(r.rank, of) : ""}">${r.rank}</span>${t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span></span>`}
+            <div class="rk-nm">${esc((t && (t.nick || t.name)) || r.team)}<small>${[nx ? `next ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))}` : "", r.n ? `${r.n} plays` : ""].filter(Boolean).join(" · ")}</small><div class="rk-bar"><i style="width:${Math.max(4, w)}%"></i></div></div>
+            <div class="rk-v">${fmtVal(r.value, cat.fmt)}</div></div>`; }).join("")}</div>
+      <div class="foot">Adjusted for opponents: a unit that faced strong opponents is not ranked on raw numbers. Early in the season thin samples lean on last season. Plays: ${esc(lg === "cfb" ? "CFBD" : "nflverse")}; line play and coverage: PFF.</div>`;
+    const on = el.querySelector('.rk-cats [aria-pressed="true"]'), bar = el.querySelector(".rk-cats");
+    if (on && bar) bar.scrollLeft = on.offsetLeft - bar.clientWidth / 2 + on.clientWidth / 2;
+    el.onclick = (e) => {
+      const c = e.target.closest("[data-rcat]"); if (c) { state.rcat = c.dataset.rcat; store.set("archer-rcat", state.rcat); renderRankings(); return; }
+      const t = e.target.closest("[data-team]"); if (t) openTeam(t.dataset.team, lg);
+    };
+  }
+  const PAIRS = [["rush_off", "rush_def", "Run game"], ["pass_off", "pass_def", "Passing game"], ["run_block", "run_stop", "Run blocking vs run stopping"], ["pass_pro", "pass_rush", "Protection vs pass rush"]];
+  function openTeam(tid, lg) {
+    const t = team(lg, tid), mine = teamRanks(lg, tid), nx = nextGame(lg, tid);
+    const theirs = nx ? teamRanks(lg, nx.opp) : [], rk = (list, key) => list.find((x) => x.c.key === key);
+    const badge = (x) => (x ? `<span class="rkb ${x.c.better ? rkCls(x.r.rank, x.of) : ""}">${ordinal(x.r.rank)}</span>` : "—");
+    const groups = [...new Set(mine.map((x) => x.c.group))];
+    const vs = nx ? PAIRS.map(([a, d, label]) => { const us = rk(mine, a), them = rk(theirs, d), us2 = rk(mine, d), them2 = rk(theirs, a);
+      return (us && them) || (us2 && them2) ? `<tr><td>${label}</td><td>${badge(us)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, tid))} O</small></td><td>${badge(them)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, nx.opp))} D</small></td></tr><tr><td></td><td>${badge(them2)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, nx.opp))} O</small></td><td>${badge(us2)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, tid))} D</small></td></tr>` : ""; }).join("") : "";
+    openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button></div>
+      <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")};min-height:120px"><div class="wm2">${esc(abbr(lg, tid))}</div>
+        <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc((t && t.name) || tid)}</div>${nx ? `<div class="sub2">next: ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))} · ${esc(when(nx.g.kickoff_utc).txt)}</div>` : ""}</div></div>
+      ${vs ? `<div class="panel"><h3><span>Matchup vs ${esc(abbr(lg, nx.opp))}</span><span style="text-transform:none;letter-spacing:0">league rank, 1 = best</span></h3><table class="vs-t">${vs}</table></div>` : ""}
+      ${groups.map((g) => `<div class="panel"><h3>${esc(g)}</h3>${mine.filter((x) => x.c.group === g).map((x) => `<div class="rk-row" style="grid-template-columns:52px 1fr auto;cursor:default">${x.c.better ? badge(x) : `<span class="rkb">${ordinal(x.r.rank)}</span>`}<div class="rk-nm">${esc(x.c.label)}<small>${esc(x.c.unit)}</small></div><div class="rk-v">${fmtVal(x.r.value, x.c.fmt)}<small>of ${x.of}</small></div></div>`).join("")}</div>`).join("")}`, true);
+  }
+  function ranksPanel(r) {
+    const items = r.ranks || [];
+    if (!items.length && !r.sos_note) return "";
+    const sos = r.p_sos != null ? `<div class="rank-li ${r.p_sos >= (r.breakeven_p ?? 0.524) ? "up" : "dn"}"><i>≈</i><span><b>Schedule-adjusted view (experimental):</b> projects ${Number(r.sos_mean).toFixed(1)} → ${pct(r.p_sos)} vs ${pct(r.breakeven_p)} needed. Graded weekly before it counts.</span></div>` : "";
+    return `<div class="panel"><h3><span>Matchup ranks</span><span style="text-transform:none;letter-spacing:0">1 = best unit</span></h3>
+      ${items.map((x) => `<div class="rank-li ${x.helps ? "up" : "dn"}"><i>${x.helps ? "▲" : "▼"}</i><span>${esc(x.text)}</span></div>`).join("")}
+      ${r.sos_note ? `<div class="rank-li"><i>↺</i><span>${esc(r.sos_note)}</span></div>` : ""}${sos}</div>`;
+  }
+  function setGSeg(v) {
+    state.gseg = v; $$("#gSeg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.gseg === v)));
+    $("#ranksPane").classList.toggle("hidden", v !== "ranks"); $("#gamesPane").classList.toggle("hidden", v === "ranks");
+    if (v === "ranks") renderRankings();
+  }
+  $("#gSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-gseg]"); if (b) setGSeg(b.dataset.gseg); });
+
   // ------------------------------------------------------------------ tabs, league, data
   const TABS = ["today", "props", "games", "slip", "bets", "record"];
   function show(tab) {
@@ -1446,7 +1519,7 @@
     state.league = lg; store.set("archer-league", lg);
     $$("#leagueSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
     state.f.market = "all"; state.f.book = "all"; saveF();
-    renderProps(); renderGames(); if (state.tab === "record") renderRecord();
+    renderProps(); renderGames(); if (state.tab === "record") renderRecord(); if (state.gseg === "ranks") renderRankings();
   }
   $("#leagueSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-league]"); if (b) setLeague(b.dataset.league); });
 
@@ -1473,7 +1546,8 @@
   // everything the app reads is the published board; refreshing it never spends Odds API credits
   async function loadData() {
     const before = state.asOf;
-    const [data, g, r, h] = await Promise.all([get("screen.json"), get("games.json"), get("results.json"), get("history.json"), assetsReady]);
+    const [data, g, r, h, rk] = await Promise.all([get("screen.json"), get("games.json"), get("results.json"), get("history.json"), get("rankings.json"), assetsReady]);
+    state.rankings = rk; if (state.gseg === "ranks") renderRankings();
     applyBoard(data);
     state.games = g || {}; renderGames();
     state.results = r; state.history = h;

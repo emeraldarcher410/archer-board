@@ -589,6 +589,27 @@
   details.panel.why summary::-webkit-details-marker { display: none; }
   details.panel.why .chev { font-size: 18px; transition: transform .2s; } details.panel.why[open] .chev { transform: rotate(90deg); }
   details.panel.why[open] summary { margin-bottom: 10px; }
+
+  /* ADR-0040: rankings */
+  .rk-cats { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+  .rk-cats::-webkit-scrollbar { display: none; }
+  .rk-cats .chip { white-space: nowrap; }
+  .rk-grp { font-size: 11px; color: var(--ink-3); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; align-self: center; padding: 0 2px 0 6px; white-space: nowrap; }
+  .rk-row { display: grid; grid-template-columns: 34px 30px 1fr auto; gap: 10px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+  .rk-row:first-child { border-top: 0; }
+  .rk-n { font-family: var(--display); font-weight: 800; font-size: 20px; text-align: center; border-radius: 9px; padding: 2px 0; }
+  .rk-n.top { background: var(--accent-soft); color: var(--accent-2); } .rk-n.bot { background: var(--red-soft); color: var(--red); }
+  .rk-row img { width: 28px; height: 28px; object-fit: contain; }
+  .rk-row .rk-nm { font-weight: 700; min-width: 0; } .rk-row .rk-nm small { display: block; font-weight: 600; color: var(--ink-3); font-size: 12px; }
+  .rk-bar { height: 5px; border-radius: 3px; background: var(--track); margin-top: 5px; overflow: hidden; } .rk-bar i { display: block; height: 100%; background: var(--accent-2); border-radius: 3px; }
+  .rk-v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .rk-v small { display: block; color: var(--ink-3); font-weight: 600; font-size: 11px; }
+  .rkb { display: inline-block; min-width: 34px; text-align: center; font-weight: 800; font-size: 12px; padding: 2px 6px; border-radius: 8px; background: var(--surface-3); color: var(--ink-2); }
+  .rkb.top { background: var(--accent-soft); color: var(--accent-2); } .rkb.bot { background: var(--red-soft); color: var(--red); }
+  .vs-t { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .vs-t td { padding: 8px 4px; border-top: 1px solid var(--line); } .vs-t td:nth-child(2), .vs-t td:nth-child(3) { text-align: center; width: 64px; }
+  .rank-li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .rank-li i { font-style: normal; } .rank-li.up i { color: var(--accent-2); } .rank-li.dn i { color: var(--red); }
   @media (min-width: 720px) { .kpi b { font-size: 26px; } .top { flex-basis: 300px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
@@ -657,6 +678,9 @@
   </section>
 
   <section id="gamesView" class="view hidden">
+    <div class="seg2" role="group" id="gSeg"><button data-gseg="games" aria-pressed="true">Games</button><button data-gseg="ranks" aria-pressed="false">Rankings</button></div>
+    <div id="ranksPane" class="hidden"></div>
+    <div id="gamesPane">
     <div class="page-h"><h1>Games</h1><span class="sub" id="gmeta"></span></div>
     <div class="chips" id="dayFilters" role="group" aria-label="Day" style="margin-bottom:10px">
       <button class="chip" data-day="today" aria-pressed="false">Today</button>
@@ -666,6 +690,7 @@
     <div class="note-card" id="modelNote"></div>
     <main id="games"><div class="sk"></div><div class="sk"></div></main>
     <div class="foot">Model score comes from team ratings built on past results only — it never sees a betting line. Tap a game for its matchup page.</div>
+    </div>
   </section>
 
   <section id="slipView" class="view hidden">
