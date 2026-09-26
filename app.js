@@ -41,7 +41,7 @@
   // ------------------------------------------------------------------ state
   const state = {
     tab: "props", league: store.get("archer-league", "nfl"), q: "", rows: [], meta: {}, games: {}, results: null, history: null, assets: null,
-    f: Object.assign({ agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false }, store.get("archer-filters", {})),
+    f: Object.assign({ agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" }, store.get("archer-filters", {})),
     day: "all", betFilter: "open", recFilter: "fav",
     slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
     watch: new Set(store.get("archer-watch", [])), hidden: new Set(), asOf: null,
@@ -153,7 +153,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      mktTag(r), chgTags(r),
+      mktTag(r), chgTags(r), trustTag(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -169,6 +169,26 @@
       </div></div>`;
   }
 
+  // ADR-0046: how this market's cleared picks have graded lately (the report card, per card)
+  let trustCache = null;
+  function trustMap() {
+    const h = (state.history && state.history.rows) || [];
+    if (trustCache && trustCache.h === h && trustCache.res === state.results) return trustCache.m;
+    const m = {};
+    h.forEach((r) => {
+      const lg = leagueOf(r), g = gradeProp(lg, normName(r.player_ref), STAT_OF[r.market], r.side, Number(r.line), String(r.commence_time || "").slice(0, 10), state.results);
+      if (!g || (g.r !== "won" && g.r !== "lost")) return;
+      const x = (m[lg + "|" + r.market] = m[lg + "|" + r.market] || { w: 0, n: 0, need: 0 });
+      x.n++; x.need += r.breakeven_p ?? 0.524; if (g.r === "won") x.w++;
+    });
+    Object.values(m).forEach((x) => { x.need /= x.n; x.hit = x.w / x.n; x.badge = x.n < 30 ? "unproven" : x.hit < x.need - 0.03 ? "struggling" : x.hit >= x.need ? (x.n >= 150 ? "proven" : "promising") : "unproven"; });
+    trustCache = { h, res: state.results, m }; return m;
+  }
+  function trustTag(r) {
+    const x = trustMap()[leagueOf(r) + "|" + r.market]; if (!x || x.n < 5) return "";
+    return `<span class="tag trust ${x.badge}" title="This market's cleared picks, last ${(state.history && state.history.days) || 14} days (needs ${pct(x.need)})">${esc(LABEL[r.market] || r.market)} ${x.w}–${x.n - x.w} · ${pct(x.hit)}</span>`;
+  }
+
   function propLeg(r) {
     return {
       id: `p|${r.book || "hardrockbet_fl"}|${r.event_id}|${r.player_ref}|${r.market}|${r.side}|${r.line}`, kind: "prop", league: leagueOf(r),
@@ -177,7 +197,12 @@
       price: r.dfs ? null : r.price, p: r.p_model ?? null, event: r.event_id, date: String(r.commence_time || "").slice(0, 10), kick: r.commence_time,
       dfs: !!r.dfs, app: r.dfs ? APP[r.book] || r.book : null, be: r.breakeven_p ?? null, team: r.form_team, pos: r.form_position || null,
       mean: r.proj_mean ?? r.form_mean ?? null, sd: r.proj_sd ?? r.form_sd ?? null, // sweat mode's pre-game projection
+      median: r.proj_median ?? null, ...usageBits(r.drivers),
     };
+  }
+  function usageBits(drivers) { // "usage 62.6 (8.0 targets x 7.79)" -> expected volume and per-unit
+    const m = /usage [\d.]+ \(([\d.]+) (targets|carries|attempts)(?: x ([\d.]+))?\)/.exec(String(drivers || ""));
+    return m ? { vol: Number(m[1]), vol_unit: m[2], eff: m[3] ? Number(m[3]) : null } : {};
   }
 
   // ------------------------------------------------------------------ props list
@@ -189,6 +214,7 @@
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
+    if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
     if (state.event) rows = rows.filter((r) => r.event_id === state.event);
     if (f.watch) rows = rows.filter((r) => state.watch.has(normName(r.player_ref)));
     if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
@@ -240,12 +266,40 @@
     $("#unhide").textContent = `${nh} hidden · show`; $("#unhide").classList.toggle("hidden", !nh);
     $("#list").innerHTML = shown.length ? shown.map(card).join("")
       : `<div class="empty"><b>${total ? "Nothing matches" : "No props yet"}</b>${total ? "Loosen the filters, or check back after the next board." : "The next board publishes after the next line snapshot."}</div>`;
-    renderApplied();
+    renderApplied(); renderPresets();
   }
+  // ADR-0046: one-tap views, and your own saved ones
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" };
+  const PRESETS = [
+    { id: "hr", name: "Hard Rock NFL · both clear", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
+    { id: "pk", name: "College pick'em · both clear", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
+    { id: "watch", name: "★ My players", league: null, f: { ...F0, agree: 0, watch: true } },
+    { id: "all", name: "Everything", league: null, f: { ...F0, agree: 0 } },
+  ];
+  const savedPresets = () => store.get("archer-presets", []);
+  const sameF = (a, b) => Object.keys(F0).every((k) => String(a[k] ?? F0[k]) === String(b[k] ?? F0[k]));
+  function renderPresets() {
+    const el = $("#presets"); if (!el) return;
+    const mine = savedPresets(), on = (p) => (!p.league || p.league === state.league) && sameF(state.f, p.f);
+    el.innerHTML = PRESETS.map((p) => `<button class="chip" data-preset="${p.id}" aria-pressed="${on(p)}">${esc(p.name)}</button>`).join("")
+      + mine.map((p, i) => `<button class="chip" data-mine="${i}" aria-pressed="${on(p)}">${esc(p.name)}<span data-unsave="${i}" aria-label="Delete" style="margin-left:4px;opacity:.6">✕</span></button>`).join("")
+      + `<button class="chip" data-savepreset>＋ Save view</button>`;
+  }
+  function applyPreset(p) { state.f = { ...F0, ...p.f }; saveF(); if (p.league && p.league !== state.league) { const keep = state.f; setLeague(p.league); state.f = keep; saveF(); } renderProps(); }
+  $("#presets").addEventListener("click", (e) => {
+    const un = e.target.closest("[data-unsave]"); if (un) { const m = savedPresets(); m.splice(Number(un.dataset.unsave), 1); store.set("archer-presets", m); renderPresets(); return; }
+    const b = e.target.closest("[data-preset]"); if (b) { applyPreset(PRESETS.find((p) => p.id === b.dataset.preset)); return; }
+    const mb = e.target.closest("[data-mine]"); if (mb) { applyPreset(savedPresets()[Number(mb.dataset.mine)]); return; }
+    if (e.target.closest("[data-savepreset]")) {
+      const name = (prompt("Name this view", "My view") || "").trim(); if (!name) return;
+      store.set("archer-presets", [...savedPresets(), { name, league: state.league, f: { ...state.f } }]); renderPresets(); toast(`Saved “${name}”`);
+    }
+  });
   function renderApplied() {
     const f = state.f, out = [];
     if (f.agree !== 1) out.push(["agree", f.agree === 2 ? "Both clear" : "Everything"]);
     if (f.book !== "all") out.push(["book", bookName(f.book)]);
+    if (f.kind && f.kind !== "all") out.push(["kind", f.kind === "pickem" ? "Pick'em only" : "Sportsbooks only"]);
     if (f.market !== "all") out.push(["market", LABEL[f.market] || f.market]);
     if (f.watch) out.push(["watch", "★ Watchlist"]);
     if (f.started) out.push(["started", "Incl. started"]);
@@ -257,7 +311,7 @@
   $("#applied").addEventListener("click", (e) => {
     const b = e.target.closest("[data-clear]"); if (!b) return;
     if (b.dataset.clear === "event") { state.event = null; renderProps(); return; }
-    const d = { agree: 1, book: "all", market: "all", watch: false, started: false, sort: "edge" };
+    const d = { agree: 1, book: "all", market: "all", watch: false, started: false, sort: "edge", kind: "all" };
     state.f[b.dataset.clear] = d[b.dataset.clear]; saveF(); renderProps();
   });
   $("#unhide").addEventListener("click", () => { state.hidden.clear(); store.set("archer-hidden", { asOf: state.asOf, keys: [] }); renderProps(); });
@@ -271,6 +325,7 @@
     const grp = (title, key, items) => `<div class="fgrp"><h4>${title}</h4><div class="chips">${items.map(([v, t, dot]) => `<button class="chip" data-k="${key}" data-v="${esc(String(v))}" aria-pressed="${String(f[key]) === String(v)}">${dot ? `<span class="sw" style="background:${dot}"></span>` : ""}${esc(t)}</button>`).join("")}</div></div>`;
     const s = openSheet(`<div class="sh-top"><h2>Filter &amp; sort</h2><button class="btn small" data-close>Done</button></div>
       ${grp("Signal", "agree", [[2, "Both clear"], [1, "Either clears"], [0, "Everything"]])}
+      ${grp("Type", "kind", [["all", "Everything"], ["book", "Sportsbooks"], ["pickem", "Pick'em apps"]])}
       ${grp("App", "book", [["all", "All apps"]].concat(books.map((b) => [b, bookName(b), DOT[b]])))}
       ${grp("Market", "market", [["all", "All markets"]].concat(markets.map((m) => [m, LABEL[m] || m])))}
       ${grp("Sort", "sort", [["edge", "Best edge"], ["kick", "Kickoff"], ["name", "Player A–Z"]])}
@@ -285,7 +340,7 @@
         $$(`[data-k="${k}"]`, s).forEach((x) => x.setAttribute("aria-pressed", String(x === c)));
         saveF(); renderProps(); const d = $("[data-close].primary", s); if (d) d.textContent = `Show ${filtered().length} props`;
       }
-      if (e.target.closest("[data-reset]")) { state.f = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false }; saveF(); renderProps(); closeSheet(); }
+      if (e.target.closest("[data-reset]")) { state.f = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" }; saveF(); renderProps(); closeSheet(); }
     });
   });
 
@@ -1355,7 +1410,28 @@
     const row = resultRow(l), v = row && l.stat ? row.stats[l.stat] : null; if (v == null) return "";
     const proj = l.mean != null ? ` vs ${Number(l.mean).toFixed(1)} projected (${v - l.mean >= 0 ? "+" : ""}${(v - l.mean).toFixed(1)})` : "";
     const use = l.stat === "rush_yds" && row.stats.rush_att != null ? ` on ${row.stats.rush_att} carries` : l.stat === "rec_yds" && row.stats.rec != null ? ` on ${row.stats.rec} catches` : "";
-    return `<span class="pm">${l.result === "won" ? "✓" : "✗"} ${v}${use}${proj}</span>`;
+    const why = whyResult(l, row.stats, v);
+    return `<span class="pm">${l.result === "won" ? "✓" : "✗"} ${v}${use}${proj}</span>${why ? `<span class="pm" style="display:block;opacity:.85">${why}</span>` : ""}`;
+  }
+  // Which part of the projection missed: the volume (targets / carries / attempts) or what he
+  // did with it, against the usage model's own pieces (ADR-0046).
+  function whyResult(l, st, v) {
+    const volKey = { targets: "targets", carries: "rush_att", attempts: "pass_att" }[l.vol_unit];
+    const got = volKey ? st[volKey] ?? null : null; // no targets in the box score: no volume check
+    const bits = [];
+    if (l.p != null) bits.push(`chance was ${pct(l.p)}`);
+    if (l.median != null) bits.push(`typical game ${Number(l.median).toFixed(1)}`);
+    if (got != null && l.vol) {
+      const volR = got / l.vol, one = { targets: "target", carries: "carry", attempts: "attempt" }[l.vol_unit];
+      bits.push(`${got} ${l.vol_unit} vs ${l.vol.toFixed(1)} expected`);
+      if (l.eff && got > 0 && l.stat !== "rec" && l.stat !== "rush_att" && l.stat !== "pass_att") {
+        const per = v / got, effR = per / l.eff;
+        bits.push(`${per.toFixed(1)} per ${one} vs ${l.eff.toFixed(1)}`);
+        const off = (x) => Math.abs(Math.log(Math.max(x, 0.05)));
+        bits.push(off(volR) >= off(effR) ? `mostly ${volR < 1 ? "less" : "more"} work than expected` : `mostly ${effR < 1 ? "less" : "more"} per touch than expected`);
+      } else bits.push(volR < 0.85 ? "less work than expected" : volR > 1.15 ? "more work than expected" : "work as expected");
+    }
+    return bits.join(" · ");
   }
   function clvSummary() {
     const legs = state.bets.flatMap((b) => b.legs).filter((l) => l.clv != null);
@@ -1446,6 +1522,61 @@
   }
 
   // ---- Today
+  // ADR-0046: "Bet now" — what clears both views (or is a favorite), ready to copy into the
+  // book and track. Hard Rock for the NFL, the pick'em apps for college.
+  function betNow(open) {
+    const seen = new Set();
+    return open.filter((r) => r.p_model != null && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
+        && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && r.market !== "player_anytime_td")
+      .sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1)))
+      .filter((r) => { const k = r.player_ref + r.market + (r.book || ""); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8);
+  }
+  const pickText = (r) => `${r.player_ref} ${r.side === "over" ? "Over" : "Under"} ${r.line} ${LABEL[r.market] || r.market}${r.dfs ? "" : ` (${odds(r.price)})`}`;
+  function betNowRow(r) {
+    const k = esc(rowKey(r)), stake = state.bank && !r.dfs ? stakeFor(r.p_model, r.price) : null;
+    return trow(r, `<div class="bn">${stake ? `<span class="bn-st">stake $${stake}</span>` : ""}<button class="btn small" data-copypick="${k}">Copy</button><button class="btn small primary" data-trackpick="${k}">${r.dfs ? "+ Slip" : "Track"}</button></div>`);
+  }
+  // ADR-0046: same-game parlay ideas for Hard Rock NFL. Two legs the model likes (at or above
+  // the market's fair price) whose outcomes move together, priced exactly with the historical
+  // correlation (a bivariate normal, fast enough for every pair on a phone). Hard Rock quotes
+  // its own odds for these, so each idea shows the lowest price worth taking.
+  function biv(a, b, rho) { // P(Z1 > a, Z2 > b), Simpson's rule over Z1
+    if (Math.abs(rho) < 1e-6) return (1 - normCdf(a)) * (1 - normCdf(b));
+    const sq = Math.sqrt(1 - rho * rho), hi = Math.max(a, 0) + 8, n = 200, h = (hi - a) / n; let sum = 0;
+    for (let i = 0; i <= n; i++) { const x = a + i * h, f = Math.exp(-x * x / 2) / 2.5066282746 * (1 - normCdf((b - rho * x) / sq)); sum += (i === 0 || i === n ? 1 : i % 2 ? 4 : 2) * f; }
+    return sum * h / 3;
+  }
+  function legRho(a, b) {
+    const t = ((state.meta.pickem || {}).corr || {})[leagueOf(a)] || {}, sa = NFLSTAT[a.market], sb = NFLSTAT[b.market];
+    if (!sa || !sb) return 0;
+    const rel = normName(a.player_ref) === normName(b.player_ref) ? "same" : a.form_team && a.form_team === b.form_team ? "team" : "opp";
+    const ka = `${POSG[String(a.form_position || "").toUpperCase()] || "X"}.${sa}`, kb = `${POSG[String(b.form_position || "").toUpperCase()] || "X"}.${sb}`;
+    const hit = t[`${rel}|${[ka, kb].sort().join("|")}`];
+    return hit ? (a.side === b.side ? 1 : -1) * Number(hit[0]) : 0;
+  }
+  function sgpIdeas(open) {
+    const legs = open.filter((r) => leagueOf(r) === "nfl" && !r.dfs && r.p_model != null && r.p_book != null && r.p_model >= r.p_book && NFLSTAT[r.market]);
+    const by = {}; legs.forEach((r) => { (by[r.event_id] = by[r.event_id] || []).push(r); });
+    const out = [];
+    Object.values(by).forEach((rs) => {
+      const top = rs.sort((a, b) => (b.p_model - b.p_book) - (a.p_model - a.p_book)).slice(0, 10), mine = [];
+      for (let i = 0; i < top.length; i++) for (let k = i + 1; k < top.length; k++) {
+        const a = top[i], b = top[k]; if (normName(a.player_ref) === normName(b.player_ref)) continue;
+        const rho = legRho(a, b); if (rho < 0.08) continue;
+        const joint = biv(zOf(1 - a.p_model), zOf(1 - b.p_model), rho), ind = a.p_model * b.p_model, mkt = a.p_book * b.p_book;
+        if (joint < 0.2) continue;
+        mine.push({ a, b, rho, joint, ind, lift: joint / mkt });
+      }
+      mine.sort((x, y) => y.lift - x.lift); out.push(...mine.slice(0, 2));
+    });
+    return out.sort((x, y) => y.lift - x.lift).slice(0, 5);
+  }
+  function sgpRow(x, i) {
+    const short = (r) => `${esc(r.player_ref)} ${r.side === "over" ? "O" : "U"} ${r.line} ${esc(LABEL[r.market] || "")}`;
+    return `<div class="trow sgp"><span class="mk2 p">⛓</span><div><b>${short(x.a)}</b><br><b>${short(x.b)}</b>
+      <small>model ${pct(x.joint)} together (${pct(x.ind)} if unrelated) · worth it at <b>${odds(toAmerican(1 / x.joint))}</b> or better on Hard Rock</small></div>
+      <button class="btn small" data-sgp="${i}">+ Slip</button></div>`;
+  }
   function trow(r, extra) {
     const lg = leagueOf(r), w = when(r.commence_time), be = r.breakeven_p ?? 0.524;
     return `<div class="trow" data-key="${esc(rowKey(r))}">${avatar(r.player_ref, lg, r.form_team, "sm")}
@@ -1469,13 +1600,16 @@
     const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
     const byKey = new Map(state.rows.map((r) => [rowKey(r), r]));
     const moves = (state.meta.movers || []).map((m) => ({ m, r: byKey.get(rowKey(m)) })).filter((x) => x.r && !when(x.r.commence_time).locked).slice(0, 6);
-    const live = liveBets(), m = todayMoney();
+    const live = liveBets(), m = todayMoney(), now = betNow(open), sgps = sgpIdeas(open);
+    state.sgps = sgps;
     const sec = (title, body, right) => `<div class="tsec"><h3><span>${title}</span>${right || ""}</h3>${body}</div>`;
     const since = state.seenAt ? ageText(new Date(state.seenAt)) : null;
     el.innerHTML = [
       overLimit() ? `<div class="warnbar">Today's loss limit is reached. Stepping away is the +EV move.</div>` : "",
       live.length ? sec("Live now", `<div class="trow live" data-go-bets><span style="display:grid;place-items:center"><i class="dot2" style="display:block;width:12px;height:12px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite"></i></span><div><b>${live.length} bet${live.length > 1 ? "s" : ""} in play</b><small>tap to sweat them</small></div><div class="pv">›</div></div>`) : "",
       state.bank && state.bank.roll ? sec("Your day", `<div class="trow" data-go-bets><span></span><div><b style="color:${m.pl >= 0 ? "var(--accent-2)" : "var(--red)"}">${m.pl >= 0 ? "+" : "−"}$${Math.abs(m.pl).toFixed(2)}</b><small>$${m.open.toFixed(0)} in play · ${m.n} bet${m.n === 1 ? "" : "s"} today${state.bank.limit ? ` · limit $${state.bank.limit}` : ""}</small></div><div class="pv">›</div></div>`) : "",
+      sec("Bet now", now.length ? now.map(betNowRow).join("") : `<div class="tempty">Nothing clears both views right now. A quiet board is the right answer, not a bug.</div>`, `<span class="sub" style="text-transform:none;letter-spacing:0">both views clear or ★</span>`),
+      sgps.length ? sec("Same-game parlay ideas · Hard Rock", sgps.map(sgpRow).join("") + `<div class="foot" style="margin:4px 0 0">Hard Rock sets its own odds for these. Add both to the Slip, type Hard Rock's quote, and it shows whether the price is worth it.</div>`) : "",
       sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
       cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
       spots.length ? sec("Best matchup spots", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head)}</span>${chgTags(r)}`)).join("")) : "",
@@ -1486,6 +1620,10 @@
     ].join("");
     el.onclick = async (e) => {
       if (e.target.closest("[data-go-bets]")) { show("bets"); return; }
+      const cp = e.target.closest("[data-copypick]"), tp = e.target.closest("[data-trackpick]"), sg = e.target.closest("[data-sgp]");
+      if (cp) { const r = byKey.get(cp.dataset.copypick); if (r) { try { await navigator.clipboard.writeText(pickText(r)); toast("Copied: paste it into the book's search"); } catch (_) { toast(pickText(r)); } } return; }
+      if (tp) { const r = byKey.get(tp.dataset.trackpick); if (r) { if (r.dfs) { if (!inSlip(r)) toggleLeg(propLeg(r)); toast("Added to the Slip for an entry"); } else trackSingle(propLeg(r)); } return; }
+      if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }

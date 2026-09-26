@@ -157,6 +157,15 @@
   .fbtn .n { background: var(--accent); color: var(--accent-ink); border-radius: 8px; font-size: 11px; padding: 1px 6px; }
   .applied { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 10px; }
   .applied .chip { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+  .presets { display: flex; gap: 6px; overflow-x: auto; padding: 2px 16px 6px; scrollbar-width: none; }
+  .presets::-webkit-scrollbar { display: none; }
+  .presets .chip { min-height: 30px; padding: 4px 11px; font-size: 12px; white-space: nowrap; }
+  .tag.trust.promising { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 45%, transparent); border-style: solid; }
+  .tag.trust.proven { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 45%, transparent); border-style: solid; }
+  .tag.trust.struggling { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); border-style: solid; }
+  .bn { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .bn .bn-st { font-size: 12px; font-weight: 700; color: var(--ink-2); margin-right: 2px; }
+  .trow.sgp { align-items: center; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; }
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -671,6 +680,7 @@
         <input id="q" type="search" placeholder="Player or team" autocomplete="off"></label>
       <button class="fbtn" id="filterBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter<span class="n hidden" id="filterN"></span></button>
     </div>
+    <div class="presets" id="presets"></div>
     <div class="applied" id="applied"></div>
     <div class="count"><span id="count2"></span><button id="unhide" class="hidden" type="button"></button></div>
     <main id="list"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
