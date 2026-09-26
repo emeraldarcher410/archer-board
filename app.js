@@ -1451,9 +1451,9 @@
       <div class="panel"><h3><span>${esc(cat.label)}</span><span style="text-transform:none;letter-spacing:0">${esc(cat.unit)}${cat.better ? ` · ${cat.better === "low" ? "lower" : "higher"} is better` : ""}</span></h3>
         ${cat.rows.map((r) => { const t = team(lg, r.team), nx = nextGame(lg, r.team); const w = hi > lo ? ((cat.better === "low" ? hi - r.value : r.value - lo) / (hi - lo)) * 100 : 50;
           return `<div class="rk-row" data-team="${esc(r.team)}"><span class="rk-n ${cat.better ? rkCls(r.rank, of) : ""}">${r.rank}</span>${t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span></span>`}
-            <div class="rk-nm">${esc((t && (t.nick || t.name)) || r.team)}<small>${[nx ? `next ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))}` : "", r.n ? `${r.n} plays` : ""].filter(Boolean).join(" · ")}</small><div class="rk-bar"><i style="width:${Math.max(4, w)}%"></i></div></div>
+            <div class="rk-nm">${esc((t && (t.nick || t.name)) || r.team)}<small>${[nx ? `next ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))}` : "", r.n ? `${r.n} ${(r.why && r.why.unit) || "plays"}` : ""].filter(Boolean).join(" · ")}</small><div class="rk-bar"><i style="width:${Math.max(4, w)}%"></i></div></div>
             <div class="rk-v">${fmtVal(r.value, cat.fmt)}</div></div>`; }).join("")}</div>
-      <div class="foot">Adjusted for opponents: a unit that faced strong opponents is not ranked on raw numbers. Early in the season thin samples lean on last season. Plays: ${esc(lg === "cfb" ? "CFBD" : "nflverse")}; line play and coverage: PFF.</div>`;
+      <div class="foot">Adjusted for opponents: a unit that faced strong opponents is not ranked on raw numbers. ${lg === "cfb" ? "College uses this season only: rosters turn over too much for last season to count." : "Early in the season thin samples lean on last season."} Plays and yards by position: ${esc(lg === "cfb" ? "CFBD" : "nflverse")}; line play and coverage: PFF.</div>`;
     const on = el.querySelector('.rk-cats [aria-pressed="true"]'), bar = el.querySelector(".rk-cats");
     if (on && bar) bar.scrollLeft = on.offsetLeft - bar.clientWidth / 2 + on.clientWidth / 2;
     el.onclick = (e) => {
@@ -1473,7 +1473,23 @@
       <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")};min-height:120px"><div class="wm2">${esc(abbr(lg, tid))}</div>
         <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc((t && t.name) || tid)}</div>${nx ? `<div class="sub2">next: ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))} · ${esc(when(nx.g.kickoff_utc).txt)}</div>` : ""}</div></div>
       ${vs ? `<div class="panel"><h3><span>Matchup vs ${esc(abbr(lg, nx.opp))}</span><span style="text-transform:none;letter-spacing:0">league rank, 1 = best</span></h3><table class="vs-t">${vs}</table></div>` : ""}
-      ${groups.map((g) => `<div class="panel"><h3>${esc(g)}</h3>${mine.filter((x) => x.c.group === g).map((x) => `<div class="rk-row" style="grid-template-columns:52px 1fr auto;cursor:default">${x.c.better ? badge(x) : `<span class="rkb">${ordinal(x.r.rank)}</span>`}<div class="rk-nm">${esc(x.c.label)}<small>${esc(x.c.unit)}</small></div><div class="rk-v">${fmtVal(x.r.value, x.c.fmt)}<small>of ${x.of}</small></div></div>`).join("")}</div>`).join("")}`, true);
+      ${groups.map((g) => `<div class="panel"><h3>${esc(g)}</h3>${mine.filter((x) => x.c.group === g).map((x) => `<div class="rk-row" style="grid-template-columns:52px 1fr auto;cursor:default">${x.c.better ? badge(x) : `<span class="rkb">${ordinal(x.r.rank)}</span>`}<div class="rk-nm">${esc(x.c.label)}<small>${esc(x.c.unit)}</small></div><div class="rk-v">${fmtVal(x.r.value, x.c.fmt)}<small>of ${x.of}</small></div></div>${whyLine(x, lg)}`).join("")}</div>`).join("")}`, true);
+  }
+  // ADR-0041: what went into a rating, so a surprising rank can be checked
+  const PAIR = { rush_def: "rush_off", pass_def: "pass_off", rush_off: "rush_def", pass_off: "pass_def" };
+  function whyLine(x, lg) {
+    const w = x.r.why; if (!w) return "";
+    const unit = w.unit || (x.c.key.startsWith("rush") ? "runs" : "dropbacks"), rawFmt = w.unit ? x.c.fmt : "epa", other = rankBlock(lg).categories.find((c) => c.key === PAIR[x.c.key]);
+    const opps = (w.opps || []).slice(0, 5).map((o) => { const r = other && other.rows.find((y) => y.team === o); return `${esc(abbr(lg, o))}${r ? ` (${ordinal(r.rank)})` : ""}`; }).join(", ");
+    const raws = x.c.rows.map((y) => y.why && y.why.raw).filter((v) => v != null).sort((a, b) => (x.c.better === "low" ? a - b : b - a));
+    const rawRank = w.raw != null ? raws.indexOf(w.raw) + 1 : 0;
+    const parts = [
+      w.raw != null ? `On raw numbers ${ordinal(rawRank)} of ${raws.length}: ${fmtVal(w.raw, rawFmt)}${w.unit ? " a game" : ""} over ${w.plays} ${unit} this season` : "",
+      w.garbage ? `${w.garbage} garbage-time ${unit} left out` : "",
+      w.prev != null ? `last season ${fmtVal(w.prev, "epa")} (counts ${Math.round((w.prev_weight || 0) * 100)}%)` : "",
+      opps ? `faced ${opps}${other ? ` (their ${esc(other.label.toLowerCase())} rank)` : ""}` : "",
+    ].filter(Boolean);
+    return parts.length ? `<div class="foot" style="margin:-4px 0 8px 62px;font-size:12px;line-height:1.5">${parts.join(" · ")}</div>` : "";
   }
   function ranksPanel(r) {
     const items = r.ranks || [];
