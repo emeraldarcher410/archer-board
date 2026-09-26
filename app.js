@@ -153,7 +153,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      mktTag(r), chgTags(r), trustTag(r),
+      volTag(r), mktTag(r), chgTags(r), trustTag(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -212,6 +212,7 @@
     const f = state.f, q = state.q.trim().toLowerCase();
     let rows = leagueRows().filter((r) => (r.agree_count ?? 0) >= f.agree && !state.hidden.has(rowKey(r)));
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
+    if (!f.lowvol) rows = rows.filter((r) => !r.volume || r.low_ok); // ADR-0048/0050: backups' props unless the market backs them
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
     if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
@@ -227,7 +228,7 @@
     return rows.sort(by[f.sort] || by.edge);
   }
   function renderTops() {
-    const favs = leagueRows().filter((r) => r.fav && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)).slice(0, 8);
+    const favs = leagueRows().filter((r) => r.fav && !r.volume && !r.market_gap && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)).slice(0, 8);
     $("#tops").innerHTML = favs.length ? favs.map((r, k) => {
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
@@ -269,12 +270,12 @@
     renderApplied(); renderPresets();
   }
   // ADR-0046: one-tap views, and your own saved ones
-  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" };
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false };
   const PRESETS = [
     { id: "hr", name: "Hard Rock NFL · both clear", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
     { id: "pk", name: "College pick'em · both clear", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
     { id: "watch", name: "★ My players", league: null, f: { ...F0, agree: 0, watch: true } },
-    { id: "all", name: "Everything", league: null, f: { ...F0, agree: 0 } },
+    { id: "all", name: "Everything", league: null, f: { ...F0, agree: 0, lowvol: true } },
   ];
   const savedPresets = () => store.get("archer-presets", []);
   const sameF = (a, b) => Object.keys(F0).every((k) => String(a[k] ?? F0[k]) === String(b[k] ?? F0[k]));
@@ -303,6 +304,7 @@
     if (f.market !== "all") out.push(["market", LABEL[f.market] || f.market]);
     if (f.watch) out.push(["watch", "★ Watchlist"]);
     if (f.started) out.push(["started", "Incl. started"]);
+    if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : "Sort: A–Z"]);
     if (state.event) { const r = state.rows.find((x) => x.event_id === state.event); if (r) out.push(["event", `${abbr(leagueOf(r), teamId(leagueOf(r), r.away_team))} @ ${abbr(leagueOf(r), teamId(leagueOf(r), r.home_team))}`]); }
     $("#applied").innerHTML = out.map(([k, t]) => `<button class="chip" aria-pressed="true" data-clear="${k}">${esc(t)} ✕</button>`).join("");
@@ -311,7 +313,7 @@
   $("#applied").addEventListener("click", (e) => {
     const b = e.target.closest("[data-clear]"); if (!b) return;
     if (b.dataset.clear === "event") { state.event = null; renderProps(); return; }
-    const d = { agree: 1, book: "all", market: "all", watch: false, started: false, sort: "edge", kind: "all" };
+    const d = { ...F0 };
     state.f[b.dataset.clear] = d[b.dataset.clear]; saveF(); renderProps();
   });
   $("#unhide").addEventListener("click", () => { state.hidden.clear(); store.set("archer-hidden", { asOf: state.asOf, keys: [] }); renderProps(); });
@@ -331,6 +333,7 @@
       ${grp("Sort", "sort", [["edge", "Best edge"], ["kick", "Kickoff"], ["name", "Player A–Z"]])}
       ${grp("Show", "watch", [[false, "All players"], [true, "★ Watchlist only"]])}
       ${grp("Started games", "started", [[false, "Hide"], [true, "Show (locked)"]])}
+      ${grp("Low-volume props (backups, tiny lines)", "lowvol", [[false, "Hide"], [true, "Show"]])}
       <div class="actions"><button class="btn grow" data-reset>Reset</button><button class="btn primary grow" data-close>Show ${filtered().length} props</button></div>`);
     s.addEventListener("click", (e) => {
       const c = e.target.closest("[data-k]");
@@ -582,7 +585,8 @@
   }
   function gameLegs(g, league) {
     const legs = [], date = String(g.kickoff_utc || "").slice(0, 10), base = { kind: "game", league, home: g.home, away: g.away, date, event: g.game_id, kick: g.kickoff_utc };
-    const add = (key, label, short, side, line) => side && side.price != null && legs.push({ ...base, id: `g|${g.game_id}|${key}`, bet: key, label, short, line, price: side.price, p: side.p, edge: side.edge, be: side.breakeven });
+    const mc = g.market_check || {}, MK = { spread_home: mc.spreads?.home, spread_away: mc.spreads?.away, over: mc.totals?.over, under: mc.totals?.under, ml_home: mc.h2h?.home, ml_away: mc.h2h?.away };
+    const add = (key, label, short, side, line) => side && side.price != null && legs.push({ ...base, id: `g|${g.game_id}|${key}`, bet: key, label, short, line, price: side.price, p: side.p, edge: side.edge, be: side.breakeven, mkt: MK[key] || null });
     if (g.spread) { const hl = g.spread.home_line; add("spread_home", `${g.home} ${hl > 0 ? "+" : ""}${hl}`, `${hl > 0 ? "+" : ""}${hl}`, g.spread.home, hl); add("spread_away", `${g.away} ${-hl > 0 ? "+" : ""}${-hl}`, `${-hl > 0 ? "+" : ""}${-hl}`, g.spread.away, hl); }
     if (g.total) { add("over", `${g.away}/${g.home} over ${g.total.line}`, `O ${g.total.line}`, g.total.over, g.total.line); add("under", `${g.away}/${g.home} under ${g.total.line}`, `U ${g.total.line}`, g.total.under, g.total.line); }
     if (g.moneyline) { add("ml_home", `${g.home} ML`, "ML", g.moneyline.home, null); add("ml_away", `${g.away} ML`, "ML", g.moneyline.away, null); }
@@ -592,7 +596,9 @@
   function lineCell(leg, flagged) {
     if (!leg) return `<div class="cell"><div class="sub">no line</div></div>`;
     const pos = leg.edge != null && leg.edge > 0; legIndex.push(leg);
-    return `<div class="cell ${pos && flagged ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div><button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
+    const m = leg.mkt, off = m && m.off_market; // ADR-0051: Hard Rock vs the other books
+    const mk = m ? `<div class="sub" title="Fair chance from FanDuel/DraftKings/ESPN Bet at this number; EV per $1 at Hard Rock's price">market <b style="color:${off ? "var(--accent-2)" : "var(--ink)"}">${pct(m.p)}</b> · EV ${m.ev >= 0 ? "+" : ""}${(m.ev * 100).toFixed(1)}%</div>` : "";
+    return `<div class="cell ${(pos && flagged) || off ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>${mk}${off ? `<span class="tag good" style="margin:2px 0">Off-market</span>` : ""}<button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
   }
   function linesGrid(g, league) {
     const flags = (state.games.meta?.game_model?.[league]?.flags) || {}, by = Object.fromEntries(gameLegs(g, league).map((l) => [l.bet, l]));
@@ -1285,7 +1291,6 @@
     $('.tabbar [data-tab="bets"]').classList.toggle("live", bets.length > 0);
     if (!el) return;
     if (!bets.length) { el.innerHTML = ""; return; }
-    if (!state.api) { el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span></h3><p style="margin:0 0 10px;font-size:14px">${bets.length} open bet${bets.length > 1 ? "s are" : " is"} in play. Connect your server to sweat them here with live stats.</p><button class="btn small" id="liveConnect">Connect</button></div>`; $("#liveConnect").addEventListener("click", () => { const s = openSheet(`<div class="sh-top"><h2>Connect</h2><button class="btn small" data-close>Done</button></div><div id="cb"></div>`); $("#cb", s).innerHTML = connectHtml(""); bindConnect($("#cb", s), () => { closeSheet(); pollLive(); }); }); return; }
     const age = state.live && state.live.at ? Math.round((Date.now() - state.live.at) / 1000) : null;
     el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live</span><span style="text-transform:none;letter-spacing:0">${age == null ? "loading…" : age < 10 ? "just updated" : `updated ${age}s ago`}</span></h3>${state.liveErr ? `<div class="foot" style="margin:0 0 8px;color:var(--amber)">Live update failed: ${esc(state.liveErr)}. Retrying every minute.</div>` : ""}${bets.map((b) => {
       const rows = b.legs.map((l) => ({ l, n: legNow(l) })), known = rows.every((x) => x.n && x.n.chance != null);
@@ -1299,17 +1304,95 @@
       }).join("")}</div>`;
     }).join("")}<div class="foot" style="margin:6px 0 0">Live chance = stats so far plus the pre-game projection for the time left. Rough; independent legs.</div></div>`;
   }
+  // ESPN straight from the phone (ADR-0047): ESPN refuses the server's data-centre address
+  // (HTTP 403), not a phone's. Same reading as fm/api/live.py; the server is the fallback.
+  const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/", ESPN_SPORT = { nfl: "nfl", cfb: "college-football" };
+  const ESPN_LABELS = { passing: { YDS: "pass_yds", TD: "pass_td", INT: "int" }, rushing: { CAR: "rush_att", YDS: "rush_yds", TD: "rush_td" }, receiving: { REC: "rec", YDS: "rec_yds", TD: "rec_td", TGTS: "targets" } };
+  const ESPN_ALIASES = { southernmississippi: "southernmiss", appalachianstate: "appstate", samhoustonstate: "samhouston", floridainternational: "fiu", massachusetts: "umass", connecticut: "uconn", louisianamonroe: "ulmonroe", texassanantonio: "utsa", centralflorida: "ucf", southernmethodist: "smu", brighamyoung: "byu", texaselpaso: "utep", miamiohio: "miamioh" };
+  const espnBoxes = new Map();
+  async function espnGet(url, ms = 12000) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error(`ESPN HTTP ${r.status}`); return await r.json(); }
+    catch (e) { throw e.name === "AbortError" ? new Error("ESPN timed out") : e; } finally { clearTimeout(t); }
+  }
+  const numOr = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; };
+  function espnGames(data, league) {
+    return (data.events || []).map((ev) => {
+      const comp = (ev.competitions || [{}])[0], sides = {};
+      (comp.competitors || []).forEach((c) => { sides[c.homeAway] = c; });
+      const st = ev.status || comp.status || {}, typ = st.type || {}, h = sides.home || {}, a = sides.away || {};
+      return { id: String(ev.id), league, state: typ.state || "pre", detail: typ.shortDetail || typ.detail || "", period: +st.period || 0, clock: +st.clock || 0,
+        home: (h.team || {}).displayName || "", away: (a.team || {}).displayName || "", home_score: numOr(h.score), away_score: numOr(a.score) };
+    });
+  }
+  function espnBox(data) {
+    const out = {};
+    for (const tb of (data.boxscore || {}).players || []) {
+      const team = (tb.team || {}).abbreviation || "";
+      for (const grp of tb.statistics || []) {
+        const gname = String(grp.name || "").toLowerCase(), want = ESPN_LABELS[gname]; if (!want) continue;
+        const labels = (grp.labels || []).map((x) => String(x).toUpperCase());
+        for (const a of grp.athletes || []) {
+          const name = (a.athlete || {}).displayName; if (!name) continue;
+          const stats = a.stats || [], k = normName(name), pl = out[k] = out[k] || { name, team, stats: {} };
+          labels.forEach((lab, i) => {
+            if (i >= stats.length) return;
+            if (gname === "passing" && lab === "C/ATT") { const ca = String(stats[i]).split("/"); if (ca.length === 2) { pl.stats.pass_cmp = numOr(ca[0]); pl.stats.pass_att = numOr(ca[1]); } }
+            else if (want[lab]) pl.stats[want[lab]] = numOr(stats[i]);
+          });
+        }
+      }
+    }
+    Object.values(out).forEach((pl) => { const s = pl.stats; if ("rush_td" in s || "rec_td" in s) s.td = (s.rush_td || 0) + (s.rec_td || 0); });
+    return out;
+  }
+  const remainingOf = (g) => g.state === "pre" ? 1 : g.state === "post" ? 0 : g.period > 4 ? 0.02 : Math.max(0, Math.min(1, ((4 - (g.period || 1)) * 900 + g.clock) / 3600));
+  function teamSim(a, b) {
+    const fix = (x) => { let k = teamKey(String(x || "").normalize("NFKD")); for (const [f, t] of Object.entries(ESPN_ALIASES)) k = k.split(f).join(t); return k; };
+    a = fix(a); b = fix(b); if (!a || !b) return 0; if (a === b) return 1;
+    const grams = (x) => { const m = new Map(); for (let i = 0; i < x.length - 1; i++) { const g = x.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+    const A = grams(a), B = grams(b); let hit = 0; A.forEach((n, g) => { hit += Math.min(n, B.get(g) || 0); });
+    return (2 * hit) / Math.max(1, a.length + b.length - 2);
+  }
+  async function liveDirect(league, wanted) {
+    const q = league === "cfb" ? "?groups=80&limit=300" : "";
+    const board = espnGames(await espnGet(ESPN + ESPN_SPORT[league] + "/scoreboard" + q), league), games = [], players = {};
+    for (const w of wanted) {
+      let best = null, score = 0;
+      for (const g of board) for (const [a, h] of [[g.away, g.home], [g.home, g.away]]) {
+        const sa = teamSim(w.away, a), sh = teamSim(w.home, h);
+        if ((Math.min(sa, sh) >= 0.8 || Math.max(sa, sh) >= 0.95) && sa + sh > score) { best = g; score = sa + sh; }
+      }
+      if (best) games.push({ ...best, away: w.away, home: w.home, remaining: remainingOf(best) });
+    }
+    await Promise.all(games.filter((g) => g.state !== "pre").map(async (g) => {
+      const key = league + ":" + g.id, hit = espnBoxes.get(key);
+      let box = hit && Date.now() - hit.at < (g.state === "post" ? 3600000 : 40000) ? hit.box : null;
+      if (!box) { try { box = espnBox(await espnGet(ESPN + ESPN_SPORT[league] + "/summary?event=" + g.id)); espnBoxes.set(key, { at: Date.now(), box }); } catch (_) { box = hit ? hit.box : {}; } }
+      for (const [k, pl] of Object.entries(box)) players[k] = { ...pl, game_id: g.id };
+    }));
+    return { league, games, players, via: "phone" };
+  }
   let polling = false;
   async function pollLive() {
     const bets = liveBets(); renderLive();
-    if (!bets.length || !state.api || document.hidden || polling) return;
+    if (!bets.length || document.hidden || polling) return;
     polling = true;
     try {
       const by = {};
       bets.forEach((b) => b.legs.filter(liveWindow).forEach((l) => { const [away, home] = String(l.sub || "").split(" @ "); if (away && home) (by[l.league] = by[l.league] || new Map()).set(away + "|" + home, { away, home }); }));
-      const live = { at: Date.now() };
-      for (const [lg, games] of Object.entries(by)) live[lg] = await apiPost("/api/live", { league: lg, games: [...games.values()] }, 25000);
-      state.live = live; state.liveErr = null;
+      const live = { at: Date.now() }, errs = [];
+      for (const [lg, games] of Object.entries(by)) {
+        const want = [...games.values()];
+        try { live[lg] = await liveDirect(lg, want); }
+        catch (e) {
+          if (!state.api) { errs.push(e.message); continue; }
+          try { live[lg] = await apiPost("/api/live", { league: lg, games: want }, 25000); }
+          catch (e2) { errs.push(`phone: ${e.message}; server: ${e2.message}`); }
+        }
+      }
+      if (Object.keys(live).length > 1) state.live = live;
+      state.liveErr = errs.length ? errs.join(" · ") : null;
     } catch (e) { state.liveErr = e.message; /* keep the last numbers; the next poll retries */ }
     polling = false; renderLive();
   }
@@ -1342,6 +1425,10 @@
   let seenTimer = null;
   function markSeen() { const cur = {}; state.rows.forEach((r) => { cur[rowKey(r)] = sigOf(r); }); store.set("archer-seen", { at: Date.now(), sig: cur }); }
   const chgTags = (r) => (state.changes.get(rowKey(r)) || []).map((t) => `<span class="chg ${t.c}">${esc(t.t)}</span>`).join("");
+  const volTag = (r) => (r.volume === "none" ? `<span class="tag warn" title="The projection is below anything the model was tested on">Too thin to price</span>`
+    : r.volume === "low" && r.low_ok ? `<span class="tag warn" title="${esc(r.low_why || "")}">Low volume · market-backed</span>`
+    : r.volume === "low" ? `<span class="tag warn" title="A backup's or tiny line: one or two touches decide it">Low volume · volatile</span>`
+    : r.market_gap ? `<span class="tag warn" title="The projection is 40%+ away from the line: the book may know a role change">Check news · big gap</span>` : "");
   const mktTag = (r) => (r.off_market && !r.dfs ? `<span class="tag mkt">Off-market +${(r.market_edge * 100).toFixed(1)}</span>` : "");
 
   // ---- bankroll: stake guide and a daily loss limit
@@ -1526,7 +1613,7 @@
   // book and track. Hard Rock for the NFL, the pick'em apps for college.
   function betNow(open) {
     const seen = new Set();
-    return open.filter((r) => r.p_model != null && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
+    return open.filter((r) => r.p_model != null && (!r.volume || r.low_ok) && !r.market_gap && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
         && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && r.market !== "player_anytime_td")
       .sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1)))
       .filter((r) => { const k = r.player_ref + r.market + (r.book || ""); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8);
@@ -1555,7 +1642,7 @@
     return hit ? (a.side === b.side ? 1 : -1) * Number(hit[0]) : 0;
   }
   function sgpIdeas(open) {
-    const legs = open.filter((r) => leagueOf(r) === "nfl" && !r.dfs && r.p_model != null && r.p_book != null && r.p_model >= r.p_book && NFLSTAT[r.market]);
+    const legs = open.filter((r) => leagueOf(r) === "nfl" && !r.dfs && !r.volume && !r.market_gap && r.p_model != null && r.p_book != null && r.p_model >= r.p_book && NFLSTAT[r.market]);
     const by = {}; legs.forEach((r) => { (by[r.event_id] = by[r.event_id] || []).push(r); });
     const out = [];
     Object.values(by).forEach((rs) => {
@@ -1602,6 +1689,11 @@
     const moves = (state.meta.movers || []).map((m) => ({ m, r: byKey.get(rowKey(m)) })).filter((x) => x.r && !when(x.r.commence_time).locked).slice(0, 6);
     const live = liveBets(), m = todayMoney(), now = betNow(open), sgps = sgpIdeas(open);
     state.sgps = sgps;
+    // ADR-0051: Hard Rock game sides the other books price better than Hard Rock does
+    const offg = [["nfl", state.games.games], ["cfb", state.games.cfb_games]].flatMap(([lg, gs]) => (gs || [])
+      .filter((g) => !when(g.kickoff_utc).locked).flatMap((g) => gameLegs(g, lg).filter((l) => l.mkt && l.mkt.off_market)))
+      .sort((a, b) => b.mkt.ev - a.mkt.ev).slice(0, 5);
+    state.offg = offg;
     const sec = (title, body, right) => `<div class="tsec"><h3><span>${title}</span>${right || ""}</h3>${body}</div>`;
     const since = state.seenAt ? ageText(new Date(state.seenAt)) : null;
     el.innerHTML = [
@@ -1613,6 +1705,7 @@
       sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
       cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
       spots.length ? sec("Best matchup spots", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head)}</span>${chgTags(r)}`)).join("")) : "",
+      offg.length ? sec("Game lines · Hard Rock vs the market", offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>market ${pct(l.mkt.p)}${l.mkt.push ? ` (+${pct(l.mkt.push)} push)` : ""} · EV <b style="color:var(--accent-2)">+${(l.mkt.ev * 100).toFixed(1)}%</b> per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Priced off FanDuel, DraftKings and ESPN Bet at Hard Rock's number (key numbers included). Unvalidated until its closing-line value is graded.</div>`) : "",
       offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
       sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
       moves.length ? sec(`Biggest moves${state.meta.movers[0] && parseStamp(state.meta.movers[0].since) ? " · since " + parseStamp(state.meta.movers[0].since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}`, moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("")) : "",
@@ -1623,6 +1716,7 @@
       const cp = e.target.closest("[data-copypick]"), tp = e.target.closest("[data-trackpick]"), sg = e.target.closest("[data-sgp]");
       if (cp) { const r = byKey.get(cp.dataset.copypick); if (r) { try { await navigator.clipboard.writeText(pickText(r)); toast("Copied: paste it into the book's search"); } catch (_) { toast(pickText(r)); } } return; }
       if (tp) { const r = byKey.get(tp.dataset.trackpick); if (r) { if (r.dfs) { if (!inSlip(r)) toggleLeg(propLeg(r)); toast("Added to the Slip for an entry"); } else trackSingle(propLeg(r)); } return; }
+      const og = e.target.closest("[data-offg]"); if (og) { const l = state.offg[Number(og.dataset.offg)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
