@@ -72,6 +72,11 @@
     return Array.isArray(got) ? got : got ? [got] : null;
   }
   const faceImg = (urls, cls) => (urls && urls.length ? `<img class="${cls}" src="${esc(urls[0])}" data-alt="${esc(urls[1] || "")}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}else{this.remove()}">` : "");
+  // the player page's large cutout: ESPN's transparent headshot sits on the team colour
+  function faceCut(league, name, tid) {
+    const f = face(league, name, tid);
+    return f && f.length ? `<img class="cut" src="${esc(f[0])}" data-alt="${esc(f[1] || "")}" alt="" referrerpolicy="no-referrer" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';this.style.borderRadius='16px';this.style.height='150px';this.style.bottom='18px';this.style.right='14px'}else{this.remove()}">` : "";
+  }
   function avatar(name, league, tid, size) {
     const t = team(league, tid), f = face(league, name, tid), col = (t && t.color) || "#334155";
     return `<div class="av ${size || ""}" style="--tc:${esc(col)}"><span class="ini">${esc(initials(name))}</span>${faceImg(f, "face")}${t && t.logo ? `<span class="badge"><img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></span>` : ""}</div>`;
@@ -119,28 +124,47 @@
   }
   const inSlip = (r) => state.slip.some((l) => l.id === propLeg(r).id);
 
+  // compact card: ring = best estimate with the break-even tick; dots = which views clear;
+  // strip = last five results against this line (green hit, red miss)
+  function ring(p, be) {
+    const R = 24, C = 2 * Math.PI * R, v = p == null ? 0 : Math.max(0, Math.min(1, p));
+    const yes = p != null && p >= be, col = p == null ? "var(--line-2)" : yes ? "var(--accent-2)" : "var(--ink-3)";
+    const ta = be * 2 * Math.PI, tx = 29 + Math.cos(ta) * R, ty = 29 + Math.sin(ta) * R, tx2 = 29 + Math.cos(ta) * (R - 7), ty2 = 29 + Math.sin(ta) * (R - 7);
+    return `<div class="ring" title="best estimate ${pct(p)} · needs ${pct(be)}"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${R}" fill="none" stroke="var(--track)" stroke-width="6"/>
+      <circle class="arc" cx="29" cy="29" r="${R}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - v)}"/>
+      <line x1="${tx}" y1="${ty}" x2="${tx2}" y2="${ty2}" stroke="var(--ink)" stroke-width="2.4" transform="translate(${Math.cos(ta) * 3.5} ${Math.sin(ta) * 3.5})"/></svg>
+      <div class="rv"><div>${p == null ? "—" : Math.round(p * 100)}<small>need ${Math.round(be * 100)}</small></div></div></div>`;
+  }
+  function dots(r, be) {
+    const d = (p, cls) => `<i class="${p == null ? "n" : p >= be ? cls : ""}"></i>`;
+    return `<div class="dots" title="form · matchup · PFF">${d(r.p_naive, "y")}${d(r.p_matchup, "y")}${d(r.p_pff, "p")}</div>`;
+  }
+  function spark(r) {
+    const g = gameLog(r).slice(0, 5).reverse(); if (!g.length) return "";
+    const line = Number(r.line), mx = Math.max(line * 1.5, ...g.map((x) => x.v)) || 1;
+    const hits = g.filter((x) => (r.side === "over" ? x.v > line : x.v < line)).length;
+    return `<div><div class="spark" aria-label="last ${g.length}: ${hits} hit">${g.map((x) => `<i class="${(r.side === "over" ? x.v > line : x.v < line) ? "y" : ""}" style="height:${Math.max(3, (x.v / mx) * 26)}px"></i>`).join("")}</div><div class="spark-l">${hits}/${g.length} L${g.length}</div></div>`;
+  }
   function card(r, i) {
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over";
     const w = when(r.commence_time);
     const tags = [
-      r.injury_note ? `<span class="tag good">▲ ${esc(String(r.injury_note).split(";")[0].replace(/^\+/, "+"))}</span>` : "",
+      r.injury_note ? `<span class="tag good">▲ ${esc(String(r.injury_note).split(";")[0])}</span>` : "",
       movement(r),
-      r.dfs && r.best_line === false ? '<span class="tag warn">better line on another app</span>' : "",
+      r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      r.n_games != null && r.n_games < 5 ? `<span class="tag">thin form · ${r.n_games} g</span>` : "",
     ].join("");
+    const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
-      <div class="card ${w.locked ? "locked" : ""}" style="--tc:${esc((t && t.color) || "var(--line-2)")}">
-        <div class="ph">${avatar(r.player_ref, lg, r.form_team)}
+      <div class="card v3 ${w.locked ? "locked" : ""}" style="--tc:${esc((t && t.color) || "var(--line-2)")}">
+        <div class="row1">${avatar(r.player_ref, lg, r.form_team)}
           <div class="who"><div class="nm">${state.watch.has(normName(r.player_ref)) ? '<span class="star">★</span>' : ""}${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</div>
-            <div class="ctx">${ctxLine(r)}</div></div>
-          <div class="signal">${verdictChip(r)}<button class="quick ${inSlip(r) ? "on" : ""}" data-quick="${i}" aria-label="Add to slip">${inSlip(r) ? "✓" : "+"}</button></div>
+            <div class="ctx">${ctxLine(r)}</div>
+            <div class="pick2" style="margin-top:6px"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span><span class="line" style="font-size:21px"><span class="dir ${over ? "o" : "u"}">${over ? "O" : "U"}</span><span class="num">${r.line}</span></span>${verdictChip(r)}</div></div>
+          <div style="text-align:center">${ring(r.p_model, be)}${dots(r, be)}</div>
         </div>
-        <div class="pickrow"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span>
-          <span class="line"><span class="dir ${over ? "o" : "u"}">${over ? "OVER" : "UNDER"}</span><span class="num">${r.line}</span></span></div>
-        <div class="subrow">${bookPill(r, be)}${tags}</div>
-        ${meters(r, be)}
-        ${r.why ? `<div class="why">${esc(r.why)}</div>` : ""}
+        <div class="row2"><div class="subrow" style="margin-top:0">${bookPill(r, be)}${edge}${tags}</div>
+          <div style="display:flex;align-items:center;gap:10px">${spark(r)}<button class="quick ${inSlip(r) ? "on" : ""}" data-quick="${i}" aria-label="Add to slip">${inSlip(r) ? "✓" : "+"}</button></div></div>
       </div></div>`;
   }
 
@@ -163,6 +187,7 @@
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
+    if (state.event) rows = rows.filter((r) => r.event_id === state.event);
     if (f.watch) rows = rows.filter((r) => state.watch.has(normName(r.player_ref)));
     if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
     const w = (r) => (state.watch.has(normName(r.player_ref)) ? 1 : 0);
@@ -184,7 +209,25 @@
     }).join("") : `<div class="top empty2">No favorites right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div>`;
     state.topRows = favs;
   }
+  function renderSlate() {
+    const rows = leagueRows(), live = rows.filter((r) => !when(r.commence_time).locked);
+    const evs = {}; live.forEach((r) => { if (!evs[r.event_id]) evs[r.event_id] = r; });
+    const games = Object.values(evs).sort((a, b) => String(a.commence_time).localeCompare(String(b.commence_time)));
+    if (!rows.length) { $("#slate").innerHTML = ""; return; }
+    const first = games[0] && new Date(games[0].commence_time);
+    const day = first && !isNaN(first) ? first.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }) : "Board";
+    const favs = live.filter((r) => r.fav).length, both = live.filter((r) => (r.agree_count ?? 0) >= 2).length;
+    const lg = state.league, logo = (name) => { const id = teamId(lg, name), t = team(lg, id); return t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="ab">${esc(abbr(lg, id).slice(0, 4))}</span>`; };
+    $("#slate").innerHTML = `<div class="slate"><div class="d">${esc(day)}</div>
+      <div class="st2"><span><b>${games.length}</b>games</span><span><b>${favs}</b>favorites</span><span><b>${both}</b>both clear</span><span><b>${live.length}</b>lines</span></div>
+      <div class="strip" id="strip">${games.map((g) => `<button class="gpill" data-ev="${esc(g.event_id)}" aria-pressed="${state.event === g.event_id}">${logo(g.away_team)}<span>@</span>${logo(g.home_team)}<span class="t2">${esc(when(g.commence_time).txt)}</span></button>`).join("")}</div></div>`;
+  }
+  $("#slate").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ev]"); if (!b) return;
+    state.event = state.event === b.dataset.ev ? null : b.dataset.ev; buzz(); renderProps();
+  });
   function renderProps() {
+    renderSlate();
     renderTops();
     const rows = filtered();
     shown = rows.slice(0, 200);
@@ -205,11 +248,13 @@
     if (f.watch) out.push(["watch", "★ Watchlist"]);
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : "Sort: A–Z"]);
+    if (state.event) { const r = state.rows.find((x) => x.event_id === state.event); if (r) out.push(["event", `${abbr(leagueOf(r), teamId(leagueOf(r), r.away_team))} @ ${abbr(leagueOf(r), teamId(leagueOf(r), r.home_team))}`]); }
     $("#applied").innerHTML = out.map(([k, t]) => `<button class="chip" aria-pressed="true" data-clear="${k}">${esc(t)} ✕</button>`).join("");
     $("#filterN").textContent = out.length; $("#filterN").classList.toggle("hidden", !out.length);
   }
   $("#applied").addEventListener("click", (e) => {
     const b = e.target.closest("[data-clear]"); if (!b) return;
+    if (b.dataset.clear === "event") { state.event = null; renderProps(); return; }
     const d = { agree: 1, book: "all", market: "all", watch: false, started: false, sort: "edge" };
     state.f[b.dataset.clear] = d[b.dataset.clear]; saveF(); renderProps();
   });
@@ -286,8 +331,43 @@
     s.innerHTML = `<div class="in" role="dialog">${full ? "" : '<div class="grab"></div>'}${html}</div>`;
     s.addEventListener("click", (e) => { if (e.target === s || e.target.closest("[data-close]")) closeSheet(); });
     document.body.appendChild(s); document.body.classList.add("locked"); sheetEl = s;
+    dragToClose(s);
     history.pushState({ sheet: 1 }, "");
     return s;
+  }
+  // pull a sheet down to dismiss it, from the grab bar or anywhere while it is scrolled to the top.
+  // Touch events (not pointer events) so the drag can claim the gesture before iOS scrolls.
+  function dragToClose(s) {
+    const box = s.querySelector(".in");
+    let y0 = null, x0 = 0, dy = 0, t0 = 0, active = false;
+    const start = (x, y, target) => {
+      if (target.closest("input, select, textarea, .strip, .chips")) return;
+      if (!target.closest(".grab") && box.scrollTop > 0) return;
+      y0 = y; x0 = x; dy = 0; t0 = Date.now(); active = false;
+    };
+    const move = (x, y, ev) => {
+      if (y0 == null) return;
+      const d = y - y0;
+      if (!active && (d < -4 || Math.abs(x - x0) > Math.abs(d) + 4)) { y0 = null; return; } // a scroll or a sideways swipe
+      dy = Math.max(0, d);
+      if (dy > 8) { active = true; if (ev.cancelable) ev.preventDefault(); box.classList.add("dragging"); box.style.transform = `translateY(${dy}px)`; s.style.setProperty("--dim", String(Math.max(0, 1 - dy / 420))); }
+    };
+    const end = () => {
+      if (y0 == null) return;
+      y0 = null; box.classList.remove("dragging");
+      if (!active) return;
+      const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > 0.5;
+      if (dy > 120 || fast) { box.style.transform = "translateY(105%)"; s.style.setProperty("--dim", "0"); setTimeout(() => closeSheet(), 200); }
+      else { box.style.transform = ""; s.style.removeProperty("--dim"); }
+    };
+    box.addEventListener("touchstart", (e) => start(e.touches[0].clientX, e.touches[0].clientY, e.target), { passive: true });
+    box.addEventListener("touchmove", (e) => move(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
+    box.addEventListener("touchend", end); box.addEventListener("touchcancel", end);
+    box.addEventListener("mousedown", (e) => { if (e.button === 0 && !e.target.closest("button, a, input, select, textarea")) { start(e.clientX, e.clientY, e.target); if (y0 != null) e.preventDefault(); } });
+    box.addEventListener("mousemove", (e) => move(e.clientX, e.clientY, e));
+    box.addEventListener("mouseup", end); box.addEventListener("mouseleave", end);
+    // a drag must not also count as a tap on whatever it started over
+    box.addEventListener("click", (e) => { if (active) { e.stopPropagation(); e.preventDefault(); active = false; } }, true);
   }
   function closeSheet(silent) {
     if (!sheetEl) return;
@@ -363,13 +443,16 @@
     const marks = [{ v: r.form_mean, t: "form", c: "var(--ink-2)" }, { v: r.proj_mean, t: "matchup", c: "var(--accent-2)" }, { v: r.pff_mean, t: "PFF", c: "#A78BFA" }];
     const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><div class="r">
         <button class="btn small" data-watch>${watched ? "★ Watching" : "☆ Watch"}</button><button class="btn small" data-share>Share</button></div></div>
-      <div class="hero" style="--tc:${esc((t && t.color) || "#334155")}">
-        <div class="h1">${avatar(r.player_ref, lg, r.form_team, "lg")}<div><div class="nm2">${esc(r.player_ref)}</div>
-          <div class="sub2">${ctxLine(r)}${r.status ? ` · <span class="st ${r.status === "OUT" ? "out" : "q"}">${esc(r.status)}</span>` : ""}</div></div></div>
-        <div class="bigpick"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${over ? "OVER" : "UNDER"} ${r.line}</div>
+      <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")}">
+        <div class="wm2">${esc(((t && t.abbr) || r.form_team || "").slice(0, 4))}</div>
+        ${faceCut(lg, r.player_ref, r.form_team)}
+        <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc(r.player_ref)}</div>
+          <div class="sub2">${ctxLine(r)}${r.status ? ` · <span class="st ${r.status === "OUT" ? "out" : "q"}">${esc(r.status)}</span>` : ""}</div>
           <div class="subrow">${verdictChip(r)}${movement(r)}</div></div>
-          <div class="pr2"><b>${pct(r.p_model)}</b><span>best estimate · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</span></div></div>
       </div>
+      <div class="pickband"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${over ? "OVER" : "UNDER"} ${r.line}</div>
+          <div style="font-size:12px;color:var(--ink-3)">best estimate ${pct(r.p_model)} · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</div></div>
+        ${ring(r.p_model, be)}</div>
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
       <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
       ${r.form_sd ? `<div class="panel"><h3><span>Projection range</span><span style="text-transform:none;letter-spacing:0">shaded = your side</span></h3>${curveChart(r.proj_mean ?? r.form_mean, r.proj_sd || r.form_sd, Number(r.line), r.side, marks)}</div>` : ""}
@@ -470,16 +553,27 @@
     const t = team(league, id);
     return `<div class="trow">${logoBox(league, id)}<div class="tn">${esc((t && t.name) || id)}<small>${esc(sub)}</small></div><div class="pts ${pts == null ? "" : win ? "" : "lose"}">${pts == null ? "" : fmt1(pts)}</div></div>`;
   }
+  // scoreboard-style: team colours split across the header, logos, model score in the middle
+  function sbSide(league, id, cls) {
+    const t = team(league, id), col = (t && t.color) || "#334155";
+    const logo = t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="fb">${esc(abbr(league, id).slice(0, 4))}</span>`;
+    return `<div class="side ${cls}" style="background:linear-gradient(${cls === "h" ? "250deg" : "110deg"}, ${esc(col)}, color-mix(in srgb, ${esc(col)} 55%, #070B12))">${logo}<div class="nm3">${esc((t && (t.nick || t.name)) || id)}<small>${esc((t && t.abbr) || (cls === "h" ? "Home" : "Away"))}</small></div></div>`;
+  }
+  function countdown(iso) { const w = when(iso); return w.txt ? `<span class="cd ${w.cls}">${esc(w.txt)}</span>` : ""; }
   function gameCard(g, league, i) {
-    const m = g.model, w = when(g.kickoff_utc);
+    const m = g.model;
     const market = g.spread_line != null ? `${g.spread_line > 0 ? abbr(league, g.home) + " −" + g.spread_line : g.spread_line < 0 ? abbr(league, g.away) + " " + g.spread_line : "Pick"} · O/U ${g.total_line ?? "—"}` : "";
     const nProps = gameRows(g, league).length;
-    return `<div class="gcard" data-g="${i}">
-      <div class="gtop"><span><span class="when ${w.cls}">${esc(w.txt || g.kickoff || "")}</span>${g.week ? " · Wk " + g.week : ""}</span><span class="mk">${esc(market)}</span></div>
-      <div class="teams">${trow(league, g.away, m ? m.away : null, m && m.away > m.home, "Away")}${trow(league, g.home, m ? m.home : null, m && m.home >= m.away, "Home")}</div>
-      ${wpBar(g, league)}${linesGrid(g, league)}
-      ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
-      <div class="glink"><span>Matchup page${nProps ? ` · ${nProps} props` : ""}</span><span>›</span></div></div>`;
+    const hi = m && m.home >= m.away;
+    return `<div class="gcard sb" data-g="${i}">
+      <div class="sbh">${sbSide(league, g.away, "a")}
+        <div class="mid3">${m ? `<div class="sc2"><span class="${hi ? "lo" : ""}" style="margin:0;color:inherit">${fmt1(m.away)}</span><span>–</span><span class="${hi ? "" : "lo"}" style="margin:0;color:inherit">${fmt1(m.home)}</span></div><div class="lbl3">model score</div>` : `<div class="lbl3">no model</div>`}</div>
+        ${sbSide(league, g.home, "h")}</div>
+      <div class="gbody">
+        <div class="gtop">${countdown(g.kickoff_utc)}<span class="mk">${esc(market)}${g.week ? " · Wk " + g.week : ""}</span></div>
+        <div style="margin-top:10px">${wpBar(g, league)}</div>${linesGrid(g, league)}
+        ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
+        <div class="glink"><span>Matchup page${nProps ? ` · ${nProps} props` : ""}</span><span>›</span></div></div></div>`;
   }
   let gamesShown = [];
   const localDate = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toDateString(); };
@@ -734,6 +828,29 @@
       return { ...r, grade: g ? g.r : null, actual: g ? g.v : null };
     }).filter((r) => r.grade === "won" || r.grade === "lost" || r.grade === "push");
   }
+  // cumulative flat-1u result, pick by pick in kickoff order, with a day tick under each new date
+  function unitsChart(rows) {
+    if (rows.length < 2) return `<div class="empty" style="padding:14px">The line appears after a couple of graded picks.</div>`;
+    const seq = rows.slice().sort((a, b) => String(a.commence_time).localeCompare(String(b.commence_time)));
+    let run = 0; const pts = [0].concat(seq.map((r) => (run += r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1)));
+    const W = 340, H = 150, L = 34, R = 8, T = 12, B = 124;
+    const lo = Math.min(0, ...pts), hi = Math.max(0, ...pts), span = hi - lo || 1;
+    const x = (i) => L + (i / (pts.length - 1)) * (W - L - R), y = (v) => T + ((hi - v) / span) * (B - T);
+    const path = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    const last = pts[pts.length - 1], col = last >= 0 ? "var(--accent-2)" : "var(--red)";
+    const area = `${path}L${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z`;
+    const days = []; seq.forEach((r, i) => { const d = String(r.commence_time || "").slice(0, 10); if (d && (!days.length || days[days.length - 1].d !== d)) days.push({ d, i: i + 1 }); });
+    const step = Math.max(1, Math.ceil(days.length / 5));
+    const ticks = days.filter((_, k) => k % step === 0).map(({ d, i }) => { const dt = new Date(d + "T12:00:00"); return `<text x="${x(i).toFixed(1)}" y="${B + 16}" text-anchor="middle">${dt.getMonth() + 1}/${dt.getDate()}</text>`; }).join("");
+    const fmt = (v) => (v >= 0 ? "+" : "") + v.toFixed(1) + "u";
+    return `<svg class="units" viewBox="0 0 ${W} ${H}" role="img" aria-label="Running units ${fmt(last)}">
+      <defs><linearGradient id="ug" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".28"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+      <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-dasharray="3 4"/>
+      <text x="${L - 6}" y="${y(hi) + 4}" text-anchor="end">${fmt(hi)}</text>${lo < 0 ? `<text x="${L - 6}" y="${y(lo) + 4}" text-anchor="end">${fmt(lo)}</text>` : ""}<text x="${L - 6}" y="${y(0) + 4}" text-anchor="end">0</text>
+      <path d="${area}" fill="url(#ug)"/><path d="${path}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(pts.length - 1)}" cy="${y(last)}" r="4" fill="${col}"/>${ticks}
+    </svg>`;
+  }
   function renderRecord() {
     const all = gradedHistory(), f = state.recFilter;
     const pick = all.filter((r) => (f === "fav" ? r.fav : f === "both" ? (r.agree_count ?? 0) >= 2 : (r.agree_count ?? 0) >= 1));
@@ -745,6 +862,7 @@
       <div class="kpi ${n && w / n >= (need || 0.524) ? "good" : n ? "bad" : ""}"><b>${n ? pct(w / n) : "—"}</b><span>Hit rate</span></div>
       <div class="kpi"><b>${need ? pct(need) : "—"}</b><span>Needed</span></div>
       <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>`;
+    $("#units").innerHTML = unitsChart(dec2);
     // calibration on everything graded, by the best estimate
     const bins = [[0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
     const calRows = bins.map(([lo, hi]) => { const s = all.filter((r) => r.grade !== "push" && r.p_model != null && r.p_model >= lo && r.p_model < hi); const k = s.filter((r) => r.grade === "won").length; return { lo, hi, n: s.length, rate: s.length ? k / s.length : null, mid: s.length ? s.reduce((a, r) => a + r.p_model, 0) / s.length : (lo + Math.min(hi, 0.75)) / 2 }; });
@@ -772,6 +890,28 @@
       <li>On the server, add a long random topic name to <code>.env</code>: <code>NTFY_TOPIC=archer-…</code> (it works like a password — don't share it).</li>
       <li>In the ntfy app tap <b>+</b> and subscribe to that same topic name.</li></ol>
     <p>Alerts then arrive after each board refresh. Tapping one opens this board.</p>`));
+  // theme: auto (follow the phone) -> light -> dark
+  const THEME_ICON = {
+    auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+    light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    dark: '<path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/>',
+  };
+  function applyTheme(t) {
+    const root = document.documentElement;
+    if (t === "auto") delete root.dataset.theme; else root.dataset.theme = t;
+    const light = t === "light" || (t === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
+    const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = light ? "#F3F5F9" : "#070B12";
+    $("#themeBtn").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">${THEME_ICON[t]}</svg>`;
+    $("#themeBtn").setAttribute("aria-label", `Theme: ${t}`);
+  }
+  let theme = store.get("archer-theme", "auto");
+  applyTheme(theme);
+  $("#themeBtn").addEventListener("click", () => {
+    theme = { auto: "light", light: "dark", dark: "auto" }[theme] || "auto";
+    store.set("archer-theme", theme); applyTheme(theme); buzz();
+    toast(theme === "auto" ? "Theme follows your phone" : `${theme[0].toUpperCase()}${theme.slice(1)} theme`);
+  });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (theme === "auto") applyTheme("auto"); });
   $("#refreshPill").addEventListener("click", () => location.reload());
   $("#reloadBtn").addEventListener("click", () => location.reload());
 
@@ -785,8 +925,16 @@
     if (tab === "slip") renderSlip();
     if (tab === "bets") renderBets();
     if (tab === "record") renderRecord();
+    moveInd();
     window.scrollTo({ top: 0 });
   }
+  function moveInd() {
+    const b = $(`.tabbar button[data-tab="${state.tab}"]`), ind = $("#tabInd");
+    if (!b || !ind) return;
+    const wrap = b.parentElement.getBoundingClientRect(), r = b.getBoundingClientRect();
+    ind.style.transform = `translateX(${r.left - wrap.left + r.width / 2 - 14}px)`;
+  }
+  window.addEventListener("resize", moveInd);
   $(".tabbar").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) { closeSheet(); show(b.dataset.tab); } });
   function setLeague(lg) {
     state.league = lg; store.set("archer-league", lg);
@@ -804,7 +952,11 @@
     $("#record").innerHTML = "<b>Weekly scorer</b> · " + t.weeks.slice(-4).map((w) => `Wk ${w.week}: Brier form ${f((w.brier || {}).form)} / matchup ${f((w.brier || {}).matchup)} / book ${f((w.brier || {}).book)}`).join(" · ") + ` (coin flip ${t.coin_flip_brier.toFixed(3)})`;
     $("#record").classList.remove("hidden");
   });
-  Promise.all([get("screen.json"), assetsReady]).then(([data]) => {
+  const hideSplash = () => { const sp = $("#splash"); if (sp) { sp.classList.add("gone"); setTimeout(() => sp.remove(), 600); } };
+  setTimeout(hideSplash, 1400);
+  const boardReady = Promise.all([get("screen.json"), assetsReady]);
+  boardReady.finally(() => setTimeout(hideSplash, 150));
+  boardReady.then(([data]) => {
     if (!data) { $("#meta").textContent = "No board published yet"; $("#list").innerHTML = `<div class="empty"><b>No board yet</b>It publishes after the next line snapshot.</div>`; renderTops(); return; }
     state.rows = data.rows || []; state.meta = data.meta || {}; state.asOf = state.meta.as_of;
     const h = store.get("archer-hidden", null); if (h && h.asOf === state.asOf) state.hidden = new Set(h.keys || []);
