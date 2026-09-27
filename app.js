@@ -149,6 +149,14 @@
     const hits = g.filter((x) => (r.side === "over" ? x.v > line : x.v < line)).length;
     return `<div><div class="spark" aria-label="last ${g.length}: ${hits} hit">${g.map((x) => `<i class="${(r.side === "over" ? x.v > line : x.v < line) ? "y" : ""}" style="height:${Math.max(3, (x.v / mx) * 26)}px"></i>`).join("")}</div><div class="spark-l">${hits}/${g.length} L${g.length}</div></div>`;
   }
+  // a pick'em prop no sportsbook on the board lists for that player - it can't be bet at
+  // Hard Rock (NFL) and has no sportsbook price behind it
+  let hrKeys = null, hrKeysRows = null;
+  function appOnlyTag(r) {
+    if (!r.dfs || leagueOf(r) !== "nfl") return "";
+    if (hrKeysRows !== state.rows) { hrKeysRows = state.rows; hrKeys = new Set(state.rows.filter((x) => !x.dfs).map((x) => `${x.event_id}|${x.market}|${normName(x.player_ref)}`)); }
+    return hrKeys.has(`${r.event_id}|${r.market}|${normName(r.player_ref)}`) ? "" : `<span class="tag warn" title="Only on ${esc(bookName(r.book))}: Hard Rock doesn't list this player's ${esc(LABEL[r.market] || r.market)}">App only · not at Hard Rock</span>`;
+  }
   function card(r, i) {
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over";
     const w = when(r.commence_time);
@@ -157,7 +165,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      volTag(r), depthTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
+      appOnlyTag(r), volTag(r), depthTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -299,7 +307,7 @@
       + mine.map((p, i) => `<button class="chip" data-mine="${i}" aria-pressed="${on(p)}">${esc(p.name)}<span data-unsave="${i}" aria-label="Delete" style="margin-left:4px;opacity:.6">✕</span></button>`).join("")
       + `<button class="chip" data-savepreset>＋ Save view</button>`;
   }
-  function applyPreset(p) { state.f = { ...F0, ...p.f }; saveF(); if (p.league && p.league !== state.league) { const keep = state.f; setLeague(p.league); state.f = keep; saveF(); } renderProps(); }
+  function applyPreset(p) { if (p.id === "td") { openTdBoard(); return; } state.f = { ...F0, ...p.f }; saveF(); if (p.league && p.league !== state.league) { const keep = state.f; setLeague(p.league); state.f = keep; saveF(); } renderProps(); }
   $("#presets").addEventListener("click", (e) => {
     const un = e.target.closest("[data-unsave]"); if (un) { const m = savedPresets(); m.splice(Number(un.dataset.unsave), 1); store.set("archer-presets", m); renderPresets(); return; }
     const b = e.target.closest("[data-preset]"); if (b) { applyPreset(PRESETS.find((p) => p.id === b.dataset.preset)); return; }
@@ -788,7 +796,52 @@
       const b = e.target.closest("button[data-gleg]"); if (b) { toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
       const p = e.target.closest("[data-gp]"); if (p) openPlayer(rows[Number(p.dataset.gp)]);
       const td = e.target.closest("[data-td]"); if (td) openPlayer(state.tdRows[Number(td.dataset.td)]);
+      if (e.target.closest("[data-tdboard]")) openTdBoard();
     });
+  }
+  // ADR-0065: the touchdown board - every NFL game's scorers in one place
+  const tdb = store.get("archer-tdb", { mkt: "any", sort: "value", star: false, gaps: false });
+  function openTdBoard() {
+    const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><h2 style="margin:0">Touchdowns</h2><span></span></div><div id="tdbBody"></div>`, true);
+    const draw = () => {
+      store.set("archer-tdb", tdb);
+      const mk = tdb.mkt === "first" ? "player_1st_td" : "player_anytime_td";
+      let rows = state.rows.filter((r) => leagueOf(r) === "nfl" && r.market === mk && r.side === "over" && !r.dfs && !when(r.commence_time).locked && r.status !== "OUT");
+      const nVal = rows.filter((r) => r.edge > 0 && !r.market_gap).length, nStar = rows.filter((r) => r.off_market).length;
+      if (tdb.star) rows = rows.filter((r) => r.off_market);
+      if (!tdb.gaps) rows = rows.filter((r) => !r.market_gap);
+      // ★ rows: the other books' fair price minus what Hard Rock needs; the rest: our number's
+      const shown = (r) => (r.off_market && r.market_edge != null ? r.market_edge : r.edge);
+      const val = (r) => (shown(r) ?? -9) + (r.off_market ? 1 : 0);
+      const sorts = { value: (a, b) => val(b) - val(a), likely: (a, b) => (b.p_matchup_raw ?? b.p_book ?? 0) - (a.p_matchup_raw ?? a.p_book ?? 0),
+        game: (a, b) => String(a.commence_time).localeCompare(String(b.commence_time)) || String(a.event_id).localeCompare(String(b.event_id)) || (b.p_matchup_raw ?? 0) - (a.p_matchup_raw ?? 0) };
+      rows.sort(sorts[tdb.sort] || sorts.value);
+      state.tdbRows = rows;
+      const chip = (k, v, t) => `<button class="chip" data-tdb="${k}" data-v="${v}" aria-pressed="${String(tdb[k]) === String(v)}">${t}</button>`;
+      const row = (r, i) => {
+        const lg = "nfl", edge = shown(r) ?? null, good = r.off_market || (edge > 0 && !r.market_gap);
+        return `<div class="tdb-r" data-tdbi="${i}">${avatar(r.player_ref, lg, r.form_team, "sm")}
+          <div class="who"><b>${esc(r.player_ref)}${r.off_market ? ' <span class="star">★</span>' : ""}</b><small>${esc([r.form_position, abbr(lg, r.form_team)].filter(Boolean).join(" · "))}${tdb.sort === "game" ? "" : ` · ${esc(abbr(lg, teamId(lg, r.away_team)))} @ ${esc(abbr(lg, teamId(lg, r.home_team)))}`}${r.market_gap ? ' · <span style="color:var(--red)">check news</span>' : ""}</small></div>
+          <div class="nums"><b>${odds(r.price)}</b><small>model ${pct(r.p_matchup_raw)} · fair ${pct(r.p_book)}</small></div>
+          <div class="val ${good ? "y" : ""}">${edge == null ? "—" : (edge > 0 ? "+" : "") + (edge * 100).toFixed(1)}</div></div>`;
+      };
+      let body = "", last = null;
+      rows.slice(0, 160).forEach((r, i) => {
+        if (tdb.sort === "game" && r.event_id !== last) { last = r.event_id; const lg = "nfl"; body += `<div class="tdb-h">${esc(abbr(lg, teamId(lg, r.away_team)))} @ ${esc(abbr(lg, teamId(lg, r.home_team)))} <small>${esc(when(r.commence_time).txt)}</small></div>`; }
+        body += row(r, i);
+      });
+      $("#tdbBody", s).innerHTML = `<div class="tdb-ctl"><div class="chips">${chip("mkt", "any", "Anytime")}${chip("mkt", "first", "First TD")}</div>
+        <div class="chips">${chip("sort", "value", "Best value")}${chip("sort", "likely", "Most likely")}${chip("sort", "game", "By game")}</div>
+        <div class="chips">${chip("star", true, "★ Best price only")}${chip("gaps", true, "Show big gaps")}</div>
+        <div class="foot" style="margin:6px 0 0">${nVal} worth it at Hard Rock's price · ${nStar} ★ best price. "fair" = the books' price with their margin out; the last column is our number minus what Hard Rock's price needs, in points (★ rows: the other books' fair price minus it). Tap for the breakdown.</div></div>
+        ${body || `<div class="empty" style="padding:18px"><b>Nothing here</b>No ${tdb.mkt === "first" ? "first-TD" : "anytime"} prices match these filters.</div>`}`;
+    };
+    s.addEventListener("click", (e) => {
+      const c = e.target.closest("[data-tdb]");
+      if (c) { const k = c.dataset.tdb, v = c.dataset.v; tdb[k] = v === "true" ? !tdb[k] : v; buzz(); draw(); return; }
+      const r = e.target.closest("[data-tdbi]"); if (r) openPlayer(state.tdbRows[Number(r.dataset.tdbi)]);
+    });
+    draw();
   }
   // ADR-0062: every listed scorer in one table - anytime and first TD side by side
   function tdPanel(rows, league) {
@@ -808,7 +861,7 @@
       const fair = r.p_book != null && /margin removed/.test(r.p_book_source || "") ? `<small>fair ${pct(r.p_book)}</small>` : "";
       return `<span class="tdc ${val ? "val" : ""} ${r.market_gap ? "gap" : ""}" data-td="${i}"><b>${odds(r.price)}${r.off_market ? " ★" : ""}</b><small>${r.p_matchup_raw != null ? "model " + pct(r.p_matchup_raw) : "no model"}${r.market_gap ? " · gap" : ""}</small>${fair}</span>`;
     };
-    return `<div class="panel"><h3><span>Touchdowns</span><span style="text-transform:none;letter-spacing:0">Hard Rock · tap a price</span></h3>
+    return `<div class="panel"><h3><span>Touchdowns</span><button class="btn small" data-tdboard>All games ›</button></h3>
       <div class="tdt"><div class="tdh"><span>Player</span><span>Anytime</span><span>First TD</span></div>
       ${list.map((x) => `<div class="tdr">${avatar(x.r.player_ref, league, x.r.form_team, "sm")}<div class="who"><b>${esc(x.r.player_ref)}</b><small>${esc([x.r.form_position, abbr(league, x.r.form_team)].filter(Boolean).join(" · "))}${x.r.proj_mean != null ? ` · ${Number(x.r.proj_mean).toFixed(2)} exp. TDs` : ""}</small></div>${cell(x.any)}${cell(x.first)}</div>`).join("")}</div>
       <div class="foot" style="margin:6px 0 0">Model: volume, red-zone and goal-line role, the team's implied points and OUT teammates; first TD = his share of the game's expected TDs. "fair" = the books' price with their margin taken out (Hard Rock's own raw price runs 10+ points high on favorites). ★ = Hard Rock pays more than FanDuel, DraftKings and ESPN Bet and beats their fair price. Green = worth it at Hard Rock's price. "gap" = model and price disagree 2x+ (check the depth chart). Leans, graded weekly.</div></div>`;
@@ -1832,7 +1885,7 @@
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#allMLean")) { applyPreset(PRESETS.find((p) => p.id === "mlean")); show("props"); return; }
-      if (e.target.closest("#allTD")) { applyPreset(PRESETS.find((p) => p.id === "td")); show("props"); return; }
+      if (e.target.closest("#allTD")) { openTdBoard(); return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };

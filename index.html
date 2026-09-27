@@ -415,6 +415,16 @@
   .tdc b { font-family: var(--display); font-size: 16px; } .tdc small { font-size: 10.5px; color: var(--ink-3); }
   .tdc.val { background: color-mix(in srgb, var(--accent) 22%, transparent); } .tdc.val b { color: var(--accent-2); }
   .tdc.gap { opacity: .55; } .tdc.na { background: none; color: var(--ink-3); cursor: default; }
+  .tdb-ctl { display: grid; gap: 8px; padding: 4px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .tdb-ctl .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tdb-h { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); padding: 14px 2px 4px; border-bottom: 1px solid var(--line); }
+  .tdb-h small { font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink-3); margin-left: 6px; }
+  .tdb-r { display: grid; grid-template-columns: auto 1fr auto 52px; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .tdb-r .who { min-width: 0; } .tdb-r .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+  .tdb-r .who small, .tdb-r .nums small { display: block; color: var(--ink-3); font-size: 11.5px; }
+  .tdb-r .nums { text-align: right; } .tdb-r .nums b { font-family: var(--display); font-size: 17px; }
+  .tdb-r .val { font-family: var(--display); font-weight: 700; font-size: 15px; text-align: right; color: var(--ink-3); }
+  .tdb-r .val.y { color: var(--accent-2); } .tdb-r .star { color: #F5B301; }
   .cmp { display: grid; gap: 6px; }
   .cmp .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 13.5px; }
   .cmp .r.me { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
