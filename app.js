@@ -153,7 +153,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      volTag(r), mktTag(r), chgTags(r), trustTag(r),
+      volTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -207,12 +207,17 @@
 
   // ------------------------------------------------------------------ props list
   let shown = [];
+  // ADR-0057: a matchup lean = a top-20% matchup for this side AND the matchup projection
+  // above the fair price by 3+ points - shown even when the shrunk probability doesn't clear.
+  const mEdge = (r) => (r.p_matchup_raw != null && r.p_book != null ? r.p_matchup_raw - r.p_book : -1);
+  const isMLean = (r) => !r.volume && !r.market_gap && (r.matchup_score ?? 0) >= 0.8 && mEdge(r) >= 0.03;
   function leagueRows() { return state.rows.filter((r) => leagueOf(r) === state.league); }
   function filtered() {
     const f = state.f, q = state.q.trim().toLowerCase();
     let rows = leagueRows().filter((r) => (r.agree_count ?? 0) >= f.agree && !state.hidden.has(rowKey(r)));
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (!f.lowvol) rows = rows.filter((r) => !r.volume || r.low_ok); // ADR-0048/0050: backups' props unless the market backs them
+    if (f.mlean) rows = rows.filter(isMLean); // ADR-0057
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
     if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
@@ -224,6 +229,7 @@
       edge: (x, y) => w(y) - w(x) || (y.fav ? 1 : 0) - (x.fav ? 1 : 0) || (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9),
       kick: (x, y) => String(x.commence_time || "").localeCompare(String(y.commence_time || "")) || (y.edge ?? -9) - (x.edge ?? -9),
       name: (x, y) => String(x.player_ref).localeCompare(String(y.player_ref)),
+      matchup: (x, y) => (y.matchup_score ?? 0) - (x.matchup_score ?? 0) || mEdge(y) - mEdge(x),
     };
     return rows.sort(by[f.sort] || by.edge);
   }
@@ -270,10 +276,11 @@
     renderApplied(); renderPresets();
   }
   // ADR-0046: one-tap views, and your own saved ones
-  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false };
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false };
   const PRESETS = [
     { id: "hr", name: "Hard Rock NFL · both clear", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
     { id: "pk", name: "College pick'em · both clear", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
+    { id: "mlean", name: "Matchup leans", league: null, f: { ...F0, agree: 0, mlean: true, sort: "matchup" } },
     { id: "watch", name: "★ My players", league: null, f: { ...F0, agree: 0, watch: true } },
     { id: "all", name: "Everything", league: null, f: { ...F0, agree: 0, lowvol: true } },
   ];
@@ -305,7 +312,8 @@
     if (f.watch) out.push(["watch", "★ Watchlist"]);
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
-    if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : "Sort: A–Z"]);
+    if (f.mlean) out.push(["mlean", "Matchup leans"]);
+    if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : f.sort === "matchup" ? "Sort: best matchup" : "Sort: A–Z"]);
     if (state.event) { const r = state.rows.find((x) => x.event_id === state.event); if (r) out.push(["event", `${abbr(leagueOf(r), teamId(leagueOf(r), r.away_team))} @ ${abbr(leagueOf(r), teamId(leagueOf(r), r.home_team))}`]); }
     $("#applied").innerHTML = out.map(([k, t]) => `<button class="chip" aria-pressed="true" data-clear="${k}">${esc(t)} ✕</button>`).join("");
     $("#filterN").textContent = out.length; $("#filterN").classList.toggle("hidden", !out.length);
@@ -330,7 +338,8 @@
       ${grp("Type", "kind", [["all", "Everything"], ["book", "Sportsbooks"], ["pickem", "Pick'em apps"]])}
       ${grp("App", "book", [["all", "All apps"]].concat(books.map((b) => [b, bookName(b), DOT[b]])))}
       ${grp("Market", "market", [["all", "All markets"]].concat(markets.map((m) => [m, LABEL[m] || m])))}
-      ${grp("Sort", "sort", [["edge", "Best edge"], ["kick", "Kickoff"], ["name", "Player A–Z"]])}
+      ${grp("Sort", "sort", [["edge", "Best edge"], ["matchup", "Best matchup"], ["kick", "Kickoff"], ["name", "Player A–Z"]])}
+      ${grp("Matchup", "mlean", [[false, "All props"], [true, "Matchup leans only"]])}
       ${grp("Show", "watch", [[false, "All players"], [true, "★ Watchlist only"]])}
       ${grp("Started games", "started", [[false, "Hide"], [true, "Show (locked)"]])}
       ${grp("Low-volume props (backups, tiny lines)", "lowvol", [[false, "Hide"], [true, "Show"]])}
@@ -628,6 +637,45 @@
     return `<div class="side ${cls}" style="background:linear-gradient(${cls === "h" ? "250deg" : "110deg"}, ${esc(col)}, color-mix(in srgb, ${esc(col)} 55%, #070B12))">${logo}<div class="nm3">${esc((t && (t.nick || t.name)) || id)}<small>${esc((t && t.abbr) || (cls === "h" ? "Home" : "Away"))}</small></div></div>`;
   }
   function countdown(iso) { const w = when(iso); return w.txt ? `<span class="cd ${w.cls}">${esc(w.txt)}</span>` : ""; }
+  // ADR-0057: the unit rankings' biggest mismatches in a game, and which way they point.
+  // Ranks are 1 = best on every unit. A rankings read, not a model pick (ADR-0051).
+  const MU_PAIRS = [["pass_off", "pass_def", "pass O", "pass D", "off"], ["rush_off", "rush_def", "run O", "run D", "off"],
+    ["pass_pro", "pass_rush", "pass pro", "pass rush", "line"], ["run_block", "run_stop", "run block", "run stop", "line"]];
+  let muIdx = null, muAt = null;
+  function rankIdxFor(lg) {
+    const rk = state.rankings; if (!rk || !rk.leagues) return null;
+    if (muAt !== rk.exported_at) { muIdx = {}; muAt = rk.exported_at; }
+    if (!muIdx[lg]) {
+      const b = rk.leagues[lg]; if (!b) return null;
+      const m = { n: b.n_teams || 0 }; (b.categories || []).forEach((c) => { m[c.key] = {}; (c.rows || []).forEach((r) => { m[c.key][r.team] = r.rank; }); });
+      muIdx[lg] = m;
+    }
+    return muIdx[lg];
+  }
+  function matchupRead(g, league) {
+    const R = rankIdxFor(league); if (!R || !R.n) return null;
+    const A = teamId(league, g.away), H = teamId(league, g.home), n = R.n, edges = [], pts = { [A]: 0, [H]: 0 };
+    let offSum = 0;
+    for (const [x, y] of [[A, H], [H, A]]) for (const [ok, dk, ol, dl, kind] of MU_PAIRS) {
+      const ro = R[ok] && R[ok][x], rd = R[dk] && R[dk][y]; if (ro == null || rd == null) continue;
+      const e = (rd - ro) / n; // + : x's unit is much better than y's matching unit
+      if (Math.abs(e) < 0.45) continue;
+      const who = e > 0 ? x : y;
+      edges.push({ e: Math.abs(e), who, text: e > 0 ? `${abbr(league, x)} ${ol} ${ordinal(ro)} vs ${abbr(league, y)} ${dl} ${ordinal(rd)}` : `${abbr(league, y)} ${dl} ${ordinal(rd)} vs ${abbr(league, x)} ${ol} ${ordinal(ro)}` });
+      pts[who] += Math.abs(e); if (kind === "off") offSum += e;
+    }
+    if (!edges.length) return null;
+    edges.sort((a, b) => b.e - a.e);
+    const d = pts[A] - pts[H], side = Math.abs(d) >= 0.5 ? (d > 0 ? A : H) : null;
+    const pace = R.pace ? ((R.pace[A] ?? n) + (R.pace[H] ?? n)) / (2 * n) : 0.5;
+    const tot = offSum + (pace <= 0.3 ? 0.4 : pace >= 0.7 ? -0.4 : 0);
+    return { edges, side, total: tot >= 0.8 ? "over" : tot <= -0.8 ? "under" : null };
+  }
+  function matchupReadHtml(g, league, full) {
+    const r = matchupRead(g, league); if (!r) return "";
+    const head = [r.side ? `favors <b>${esc(abbr(league, r.side))}</b>` : "", r.total ? `leans <b>${r.total}</b>` : ""].filter(Boolean).join(" · ");
+    return `<div class="mism"><span class="h">Matchup read${head ? ": " + head : ""} · rankings, not a pick</span>${r.edges.slice(0, full ? 8 : 2).map((x) => `<div class="i">${esc(x.text)}</div>`).join("")}</div>`;
+  }
   function gameCard(g, league, i) {
     const m = g.model;
     const market = g.spread_line != null ? `${g.spread_line > 0 ? abbr(league, g.home) + " −" + g.spread_line : g.spread_line < 0 ? abbr(league, g.away) + " " + g.spread_line : "Pick"} · O/U ${g.total_line ?? "—"}` : "";
@@ -640,6 +688,7 @@
       <div class="gbody">
         <div class="gtop">${countdown(g.kickoff_utc)}<span class="mk">${esc(market)}${g.week ? " · Wk " + g.week : ""}</span></div>
         <div style="margin-top:10px">${wpBar(g, league)}</div>${linesGrid(g, league)}
+        ${matchupReadHtml(g, league, false)}
         ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
         <div class="glink"><span>Matchup page${nProps ? ` · ${nProps} props` : ""}</span><span>›</span></div></div></div>`;
   }
@@ -715,6 +764,7 @@
         <div style="margin-top:12px">${wpBar(g, league)}</div></div>
       ${gameGlance(g, league)}
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
+      ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
       ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · unvalidated</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
       ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3>Player projections</h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
@@ -1685,8 +1735,10 @@
     const soon = Date.now() + 40 * 3600000;
     const cfb = open.filter((r) => r.dfs && leagueOf(r) === "cfb" && Date.parse(r.commence_time) < soon).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 4);
     const seenSpot = new Set();
-    const spots = open.filter((r) => r.rank_head && (r.matchup_score ?? 0) >= 0.8 && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && (r.p_model ?? 0) >= (r.breakeven_p ?? 0.524) - 0.03)
-      .sort((a, b) => (b.matchup_score - a.matchup_score) || ((b.edge ?? -1) - (a.edge ?? -1)))
+    const seenM = new Set();
+    const spots = open.filter((r) => isMLean(r) && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs))
+      .sort((a, b) => (b.matchup_score - a.matchup_score) || (mEdge(b) - mEdge(a)))
+      .filter((r) => { const k = normName(r.player_ref) + r.market + r.side; if (seenM.has(k)) return false; seenM.add(k); return true; })
       .filter((r) => { const k = r.player_ref + r.market; if (seenSpot.has(k)) return false; seenSpot.add(k); return true; }).slice(0, 5);
     const offm = open.filter((r) => r.off_market && !r.dfs).sort((a, b) => b.market_edge - a.market_edge).slice(0, 3);
     const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
@@ -1709,7 +1761,7 @@
       sgps.length ? sec("Same-game parlay ideas · Hard Rock", sgps.map(sgpRow).join("") + `<div class="foot" style="margin:4px 0 0">Hard Rock sets its own odds for these. Add both to the Slip, type Hard Rock's quote, and it shows whether the price is worth it.</div>`) : "",
       sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
       cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
-      spots.length ? sec("Best matchup spots", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head)}</span>${chgTags(r)}`)).join("")) : "",
+      spots.length ? sec("Matchup leans", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)).join("") + `<div class="foot" style="margin:4px 0 0">Top-20% matchups where the matchup projection agrees. Leans, not bets: the full probability hasn't cleared break-even.</div>`, `<button id="allMLean">See all</button>`) : "",
       offg.length ? sec("Game lines · Hard Rock vs the market", offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>market ${pct(l.mkt.p)}${l.mkt.push ? ` (+${pct(l.mkt.push)} push)` : ""} · EV <b style="color:var(--accent-2)">+${(l.mkt.ev * 100).toFixed(1)}%</b> per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Priced off FanDuel, DraftKings and ESPN Bet at Hard Rock's number (key numbers included). ${flagTrack()}</div>`) : "",
       offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
       sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
@@ -1724,6 +1776,7 @@
       const og = e.target.closest("[data-offg]"); if (og) { const l = state.offg[Number(og.dataset.offg)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
+      if (e.target.closest("#allMLean")) { applyPreset(PRESETS.find((p) => p.id === "mlean")); show("props"); return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };
