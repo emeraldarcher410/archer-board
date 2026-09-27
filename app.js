@@ -1366,10 +1366,10 @@
   function shortcutHelp() {
     const url = state.api ? state.api.url : apiUrl();
     return `<details class="howto"><summary>Set up one-tap checking from a screenshot</summary><ol>
-      <li>Open <b>Shortcuts</b> → <b>+</b>, name it <b>Archer check</b>. Tap ⓘ, turn on <b>Show in Share Sheet</b>, and accept <b>Images</b>.</li>
-      <li>Add <b>Extract Text from Image</b> (input: Shortcut Input).</li>
-      <li>Add <b>Get Contents of URL</b>: URL <code>${esc(url)}/api/check?format=text</code> <button class="btn small" data-copy="url">Copy</button>; Method <b>POST</b>; add header <b>Authorization</b> = <code>Bearer ••••</code> <button class="btn small" data-copy="auth">Copy</button>; Request Body <b>JSON</b> with key <b>text</b> = <i>Extracted Text</i>.</li>
-      <li>Add <b>Show Result</b>.</li></ol>
+      <li>Open <b>Shortcuts</b> → <b>+</b>, name it <b>Archer check</b>.</li>
+      <li>Add <b>Extract Text from Image</b> and set its input to <b>Shortcut Input</b>. A <i>Receive … from</i> block appears on top: set it to receive <b>Images</b> from <b>Share Sheet</b>. (Older iOS: ⓘ → <b>Show in Share Sheet</b>.)</li>
+      <li>Add <b>Get Contents of URL</b>: URL <code>${esc(url)}/api/check?format=text</code> <button class="btn small" data-copy="url">Copy</button>. Expand it: Method <b>POST</b>; <b>Add new header</b> with key <code>Authorization</code> and value <code>Bearer ••••</code> <button class="btn small" data-copy="auth">Copy</button> (the value box, not the key); Request Body <b>JSON</b> → <b>Add new field</b> → Text, key <code>text</code>, value the <i>Text from Image</i> variable.</li>
+      <li>Add <b>Show Content</b> (older iOS: <b>Show Result</b>) showing <i>Contents of URL</i>.</li></ol>
       <p style="font-size:13px;color:var(--ink-3)">Then: screenshot your PrizePicks / Underdog / Hard Rock slip → tap the preview → Share → <b>Archer check</b>. The answer pops up without leaving the app. The passcode works like a password — keep the shortcut to yourself.</p></details>`;
   }
   function renderCheck(s, res, text) {
