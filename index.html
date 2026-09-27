@@ -425,6 +425,14 @@
   .tdb-r .nums { text-align: right; } .tdb-r .nums b { font-family: var(--display); font-size: 17px; }
   .tdb-r .val { font-family: var(--display); font-weight: 700; font-size: 15px; text-align: right; color: var(--ink-3); }
   .tdb-r .val.y { color: var(--accent-2); } .tdb-r .star { color: #F5B301; }
+  .mstrip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; margin: 10px 0 2px; scrollbar-width: none; }
+  .mstrip::-webkit-scrollbar { display: none; }
+  .mchip { flex: 0 0 auto; display: grid; gap: 1px; text-align: left; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--card, transparent); color: var(--ink); font: inherit; cursor: pointer; }
+  .mchip span { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; }
+  .mchip b { font-family: var(--display); font-size: 18px; }
+  .mchip small { font-size: 11px; color: var(--ink-3); }
+  .mchip.lean small { color: var(--accent-2); font-weight: 700; }
+  .mchip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .cmp { display: grid; gap: 6px; }
   .cmp .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 13.5px; }
   .cmp .r.me { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }

@@ -519,6 +519,26 @@
   }
 
   // ------------------------------------------------------------------ player sheet
+  // every market this player has in this game, one chip each; the sheet shows one at a time
+  function lineStrip(r) {
+    const mine = state.rows.filter((x) => x.event_id === r.event_id && normName(x.player_ref) === normName(r.player_ref));
+    const byMk = new Map();
+    mine.forEach((x) => { const a = byMk.get(x.market) || []; a.push(x); byMk.set(x.market, a); });
+    if (byMk.size < 2) { state.pmRows = []; return ""; }
+    const order = Object.keys(LABEL);
+    const pick = (list) => { // the viewed book if it lists it, else Hard Rock, else any; then the side we lean to
+      const books = [r.book, "hardrockbet_fl", ...list.map((x) => x.book)];
+      const bk = books.find((b) => list.some((x) => x.book === b));
+      const sides = list.filter((x) => x.book === bk);
+      return sides.sort((a, b) => (b.edge ?? -9) - (a.edge ?? -9))[0];
+    };
+    state.pmRows = [...byMk.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, list]) => pick(list));
+    return `<div class="mstrip">${state.pmRows.map((x, i) => {
+      const lean = x.edge != null && x.edge > 0 && !x.market_gap && !x.volume, cur = x.market === r.market;
+      const what = isTD(x) ? odds(x.price) : x.line;
+      return `<button class="mchip ${lean ? "lean" : ""}" data-mk="${i}" aria-pressed="${cur}"><span>${esc(LABEL[x.market] || x.market)}</span><b>${what}</b><small>${lean ? `${isTD(x) ? "Yes" : x.side === "over" ? "▲ O" : "▼ U"} +${(x.edge * 100).toFixed(1)}` : "no lean"}</small></button>`;
+    }).join("")}</div>`;
+  }
   function openPlayer(r) {
     if (!r) return;
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over", w = when(r.commence_time);
@@ -543,6 +563,7 @@
           ${r.p_market != null && !r.dfs ? `<div style="font-size:12px;color:${r.off_market ? "var(--accent-2)" : "var(--ink-3)"}">market ${pct(r.p_market)} (${esc(r.market_books || "")})${r.off_market ? " · off-market" : ""}</div>` : ""}
           ${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? `<div style="font-size:12px;font-weight:700;margin-top:2px">Suggested stake $${stakeFor(r.p_model, r.price)}</div>` : ""}</div>
         ${ring(r.p_model, be)}</div>
+      ${lineStrip(r)}
       ${glancePanel(r)}
       ${ranksPanel(r)}
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
@@ -555,6 +576,7 @@
     s.addEventListener("click", (e) => {
       if (e.target.closest("[data-add]")) { toggleLeg(propLeg(r)); e.target.closest("[data-add]").textContent = inSlip(r) ? "✓ On your slip" : "+ Add to slip"; renderProps(); }
       if (e.target.closest("[data-track]")) trackSingle(propLeg(r));
+      const mk = e.target.closest("[data-mk]"); if (mk) { const x = state.pmRows[Number(mk.dataset.mk)]; if (x && x !== r) { buzz(); openPlayer(x); } return; }
       if (e.target.closest("[data-share]")) shareCard(r);
       if (e.target.closest("[data-target]")) openTarget(r);
       if (e.target.closest("[data-watch]")) {
