@@ -595,7 +595,9 @@
   function gameLegs(g, league) {
     const legs = [], date = String(g.kickoff_utc || "").slice(0, 10), base = { kind: "game", league, home: g.home, away: g.away, date, event: g.game_id, kick: g.kickoff_utc };
     const mc = g.market_check || {}, MK = { spread_home: mc.spreads?.home, spread_away: mc.spreads?.away, over: mc.totals?.over, under: mc.totals?.under, ml_home: mc.h2h?.home, ml_away: mc.h2h?.away };
-    const add = (key, label, short, side, line) => side && side.price != null && legs.push({ ...base, id: `g|${g.game_id}|${key}`, bet: key, label, short, line, price: side.price, p: side.p, edge: side.edge, be: side.breakeven, mkt: MK[key] || null });
+    const ep = g.spread && g.spread.early_pick; // ADR-0059
+    const add = (key, label, short, side, line) => side && side.price != null && legs.push({ ...base, id: `g|${g.game_id}|${key}`, bet: key, label, short, line, price: side.price, p: side.p, edge: side.edge, be: side.breakeven, mkt: MK[key] || null,
+      early: ep && ((key === "spread_home" && ep.side === "home") || (key === "spread_away" && ep.side === "away")) ? ep : null });
     if (g.spread) { const hl = g.spread.home_line; add("spread_home", `${g.home} ${hl > 0 ? "+" : ""}${hl}`, `${hl > 0 ? "+" : ""}${hl}`, g.spread.home, hl); add("spread_away", `${g.away} ${-hl > 0 ? "+" : ""}${-hl}`, `${-hl > 0 ? "+" : ""}${-hl}`, g.spread.away, hl); }
     if (g.total) { add("over", `${g.away}/${g.home} over ${g.total.line}`, `O ${g.total.line}`, g.total.over, g.total.line); add("under", `${g.away}/${g.home} under ${g.total.line}`, `U ${g.total.line}`, g.total.under, g.total.line); }
     if (g.moneyline) { add("ml_home", `${g.home} ML`, "ML", g.moneyline.home, null); add("ml_away", `${g.away} ML`, "ML", g.moneyline.away, null); }
@@ -607,7 +609,7 @@
     const pos = leg.edge != null && leg.edge > 0; legIndex.push(leg);
     const m = leg.mkt, off = m && m.off_market; // ADR-0051: Hard Rock vs the other books
     const mk = m ? `<div class="sub" title="Fair chance from FanDuel/DraftKings/ESPN Bet at this number; EV per $1 at Hard Rock's price">market <b style="color:${off ? "var(--accent-2)" : "var(--ink)"}">${pct(m.p)}</b> · EV ${m.ev >= 0 ? "+" : ""}${(m.ev * 100).toFixed(1)}%</div>` : "";
-    return `<div class="cell ${(pos && flagged) || off ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>${mk}${off ? `<span class="tag good" style="margin:2px 0">Off-market</span>` : ""}<button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
+    return `<div class="cell ${(pos && flagged) || off ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>${mk}${off ? `<span class="tag good" style="margin:2px 0">Off-market</span>` : ""}${leg.early ? `<span class="tag good" style="margin:2px 0" title="Model ${Math.abs(leg.early.gap)} pts off this line, early in the week: lines have moved toward the model (provisional)">Early-line pick</span>` : ""}<button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
   }
   function linesGrid(g, league) {
     const flags = (state.games.meta?.game_model?.[league]?.flags) || {}, by = Object.fromEntries(gameLegs(g, league).map((l) => [l.bet, l]));
@@ -1751,6 +1753,12 @@
       .filter((g) => !when(g.kickoff_utc).locked).flatMap((g) => gameLegs(g, lg).filter((l) => l.mkt && l.mkt.off_market)))
       .sort((a, b) => b.mkt.ev - a.mkt.ev).slice(0, 5);
     state.offg = offg;
+    // ADR-0059: early-week college spread picks while the opener research passes
+    const earlyInfo = ((state.games.meta || {}).game_model || {}).cfb?.early || {};
+    const early = [["nfl", state.games.games], ["cfb", state.games.cfb_games]].flatMap(([lg, gs]) => (gs || [])
+      .filter((g) => !when(g.kickoff_utc).locked).flatMap((g) => gameLegs(g, lg).filter((l) => l.early)))
+      .sort((a, b) => Math.abs(b.early.gap) - Math.abs(a.early.gap)).slice(0, 8);
+    state.early = early;
     const sec = (title, body, right) => `<div class="tsec"><h3><span>${title}</span>${right || ""}</h3>${body}</div>`;
     const since = state.seenAt ? ageText(new Date(state.seenAt)) : null;
     el.innerHTML = [
@@ -1762,6 +1770,7 @@
       sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
       cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
       spots.length ? sec("Matchup leans", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)).join("") + `<div class="foot" style="margin:4px 0 0">Top-20% matchups where the matchup projection agrees. Leans, not bets: the full probability hasn't cleared break-even.</div>`, `<button id="allMLean">See all</button>`) : "",
+      early.length ? sec("Early-line picks · college spreads", early.map((l, i) => `<div class="trow"><span class="mk2 p">⏱</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>model ${Math.abs(l.early.gap)} pts off Hard Rock's line · bet before it moves</small></div><button class="btn small" data-early="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Provisional. When the model was 5+ points off the opener, lines moved its way ${earlyInfo.record ? `and it went ${esc(earlyInfo.record)} (${pct(earlyInfo.hit_at_open)}) at the opener` : ""} on past seasons; nothing is left by the close. Tracked on closing-line value. ${flagTrack()}</div>`) : "",
       offg.length ? sec("Game lines · Hard Rock vs the market", offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>market ${pct(l.mkt.p)}${l.mkt.push ? ` (+${pct(l.mkt.push)} push)` : ""} · EV <b style="color:var(--accent-2)">+${(l.mkt.ev * 100).toFixed(1)}%</b> per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Priced off FanDuel, DraftKings and ESPN Bet at Hard Rock's number (key numbers included). ${flagTrack()}</div>`) : "",
       offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
       sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
@@ -1773,6 +1782,7 @@
       const cp = e.target.closest("[data-copypick]"), tp = e.target.closest("[data-trackpick]"), sg = e.target.closest("[data-sgp]");
       if (cp) { const r = byKey.get(cp.dataset.copypick); if (r) { try { await navigator.clipboard.writeText(pickText(r)); toast("Copied: paste it into the book's search"); } catch (_) { toast(pickText(r)); } } return; }
       if (tp) { const r = byKey.get(tp.dataset.trackpick); if (r) { if (r.dfs) { if (!inSlip(r)) toggleLeg(propLeg(r)); toast("Added to the Slip for an entry"); } else trackSingle(propLeg(r)); } return; }
+      const ea = e.target.closest("[data-early]"); if (ea) { const l = state.early[Number(ea.dataset.early)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       const og = e.target.closest("[data-offg]"); if (og) { const l = state.offg[Number(og.dataset.offg)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
