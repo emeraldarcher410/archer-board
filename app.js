@@ -21,7 +21,11 @@
   const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
   const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} d`; };
   const STAT_OF = { player_pass_yds: "pass_yds", player_pass_tds: "pass_td", player_pass_completions: "pass_cmp", player_pass_attempts: "pass_att", player_pass_interceptions: "int", player_rush_yds: "rush_yds", player_rush_attempts: "rush_att", player_receptions: "rec", player_reception_yds: "rec_yds" };
-  const LABEL = { player_reception_yds: "Rec yds", player_receptions: "Receptions", player_pass_yds: "Pass yds", player_pass_tds: "Pass TDs", player_pass_completions: "Completions", player_pass_attempts: "Pass att", player_pass_interceptions: "INTs", player_rush_yds: "Rush yds", player_rush_attempts: "Carries", player_anytime_td: "Anytime TD" };
+  const LABEL = { player_reception_yds: "Rec yds", player_receptions: "Receptions", player_pass_yds: "Pass yds", player_pass_tds: "Pass TDs", player_pass_completions: "Completions", player_pass_attempts: "Pass att", player_pass_interceptions: "INTs", player_rush_yds: "Rush yds", player_rush_attempts: "Carries", player_anytime_td: "Anytime TD", player_1st_td: "First TD" };
+  // ADR-0062: TD props have no line - "Yes"/"No", never "O 0.5"
+  const TDM = new Set(["player_anytime_td", "player_1st_td"]);
+  const isTD = (r) => TDM.has(r.market);
+  const sideLine = (r) => (isTD(r) ? (r.side === "over" ? "" : "No") : `${r.side === "over" ? "O" : "U"} ${r.line}`);
   const APP = { prizepicks: "PrizePicks", underdog: "Underdog", fanduel: "FanDuel", draftkings: "DraftKings", espnbet: "ESPN Bet" };
   const DOT = { prizepicks: "#8B5CF6", underdog: "#FACC15", hardrockbet_fl: "#D4AF37", hardrockbet: "#D4AF37", fanduel: "#1493FF", draftkings: "#53D337", espnbet: "#E11D48" };
   const bookName = (b) => APP[b] || (String(b).startsWith("hardrock") ? "Hard Rock" : b);
@@ -153,7 +157,7 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      volTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
+      volTag(r), depthTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
     ].join("");
     const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
@@ -161,7 +165,7 @@
         <div class="row1">${avatar(r.player_ref, lg, r.form_team)}
           <div class="who"><div class="nm">${state.watch.has(normName(r.player_ref)) ? '<span class="star">★</span>' : ""}${esc(r.player_ref)}${r.status === "OUT" ? '<span class="st out">OUT</span>' : r.status === "Q" ? '<span class="st q">Q</span>' : ""}</div>
             <div class="ctx">${ctxLine(r)}</div>
-            <div class="pick2" style="margin-top:6px"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span><span class="line" style="font-size:21px"><span class="dir ${over ? "o" : "u"}">${over ? "O" : "U"}</span><span class="num">${r.line}</span></span>${verdictChip(r)}</div>${r.glance_head ? `<div class="gl">${esc(r.glance_head)}</div>` : ""}</div>
+            <div class="pick2" style="margin-top:6px"><span class="mkt">${esc(r.market_label || LABEL[r.market] || r.market)}</span><span class="line" style="font-size:21px">${isTD(r) ? `<span class="dir ${over ? "o" : "u"}">${over ? "YES" : "NO"}</span>` : `<span class="dir ${over ? "o" : "u"}">${over ? "O" : "U"}</span><span class="num">${r.line}</span>`}</span>${verdictChip(r)}</div>${r.glance_head ? `<div class="gl">${esc(r.glance_head)}</div>` : ""}</div>
           <div style="text-align:center">${ring(r.p_model, be)}${dots(r, be)}</div>
         </div>
         <div class="row2"><div class="subrow" style="margin-top:0">${bookPill(r, be)}${edge}${tags}</div>
@@ -218,6 +222,7 @@
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (!f.lowvol) rows = rows.filter((r) => !r.volume || r.low_ok); // ADR-0048/0050: backups' props unless the market backs them
     if (f.mlean) rows = rows.filter(isMLean); // ADR-0057
+    if (f.td) rows = rows.filter((r) => isTD(r) && r.side === "over"); // ADR-0062
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
     if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
@@ -239,7 +244,7 @@
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
         <div class="who2">${avatar(r.player_ref, lg, r.form_team, "sm")}<div class="who"><div class="nm">${esc(r.player_ref)}</div><div class="ctx">${ctxLine(r)}</div></div></div>
-        <div class="p"><span class="big">${r.side === "over" ? "O" : "U"} ${r.line} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}</span></div>
+        <div class="p"><span class="big">${sideLine(r)} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}</span></div>
         <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}</div></div>`;
     }).join("") : `<div class="top empty2">No favorites right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div>`;
     state.topRows = favs;
@@ -276,11 +281,12 @@
     renderApplied(); renderPresets();
   }
   // ADR-0046: one-tap views, and your own saved ones
-  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false };
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false };
   const PRESETS = [
     { id: "hr", name: "Hard Rock NFL · both clear", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
     { id: "pk", name: "College pick'em · both clear", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
     { id: "mlean", name: "Matchup leans", league: null, f: { ...F0, agree: 0, mlean: true, sort: "matchup" } },
+    { id: "td", name: "Touchdowns", league: "nfl", f: { ...F0, agree: 0, td: true } },
     { id: "watch", name: "★ My players", league: null, f: { ...F0, agree: 0, watch: true } },
     { id: "all", name: "Everything", league: null, f: { ...F0, agree: 0, lowvol: true } },
   ];
@@ -313,6 +319,7 @@
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
     if (f.mlean) out.push(["mlean", "Matchup leans"]);
+    if (f.td) out.push(["td", "Touchdowns"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : f.sort === "matchup" ? "Sort: best matchup" : "Sort: A–Z"]);
     if (state.event) { const r = state.rows.find((x) => x.event_id === state.event); if (r) out.push(["event", `${abbr(leagueOf(r), teamId(leagueOf(r), r.away_team))} @ ${abbr(leagueOf(r), teamId(leagueOf(r), r.home_team))}`]); }
     $("#applied").innerHTML = out.map(([k, t]) => `<button class="chip" aria-pressed="true" data-clear="${k}">${esc(t)} ✕</button>`).join("");
@@ -450,11 +457,13 @@
   function gameLog(r) {
     const vals = String(r.recent_values || "").split(",").map((x) => x.trim()).filter((x) => x !== "").map(Number);
     const games = String(r.recent_games || "").split(";");
+    // recent_targets: targets in the same games, for receiving props (NFL)
+    const tgts = r.recent_targets ? String(r.recent_targets).split(",").map((x) => Number(x.trim())) : [];
     const lg = leagueOf(r);
     return vals.map((v, i) => {
       const [date, opp, ha] = (games[i] || "").split("|");
       const d = date ? new Date(date + "T12:00:00") : null;
-      return { v, opp: opp || "", oppShort: opp ? String(abbr(lg, opp)).slice(0, 5) : "", ha: ha === "@" ? "@" : "vs",
+      return { v, tgt: Number.isFinite(tgts[i]) ? tgts[i] : null, opp: opp || "", oppShort: opp ? String(abbr(lg, opp)).slice(0, 5) : "", ha: ha === "@" ? "@" : "vs",
         date: d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : "", long: d && !isNaN(d) ? d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }) : "" };
     });
   }
@@ -467,7 +476,7 @@
       const hit = side === "over" ? x.v > line : x.v < line, cx = left + i * bw + bw / 2;
       const bx = left + i * bw + bw * 0.15, h = Math.max(1, base - y(x.v));
       return `<rect x="${bx}" y="${y(x.v)}" width="${bw * 0.7}" height="${h}" rx="4" fill="${hit ? "var(--accent)" : "var(--red)"}" opacity="${hit ? 0.95 : 0.7}"><animate attributeName="height" from="0" to="${h}" dur=".5s"/><animate attributeName="y" from="${base}" to="${y(x.v)}" dur=".5s"/></rect>
-        <text x="${cx}" y="${y(x.v) - 5}" text-anchor="middle" class="lbl2">${x.v}</text>
+        <text x="${cx}" y="${y(x.v) - 5}" text-anchor="middle" class="lbl2">${x.v}${x.tgt != null ? `<tspan style="font-size:9.5px;font-weight:500"> /${x.tgt}</tspan>` : ""}</text>
         <text x="${cx}" y="${base + 16}" text-anchor="middle" class="lbl2" style="font-size:10.5px">${esc(x.oppShort ? (x.ha === "@" ? "@" : "") + x.oppShort : "")}</text>
         <text x="${cx}" y="${base + 30}" text-anchor="middle" style="font-size:10px">${esc(x.date)}</text>`;
     }).join("");
@@ -480,7 +489,8 @@
     if (!games.length || !games.some((x) => x.opp)) return "";
     return `<div class="glog">${games.map((x) => {
       const hit = side === "over" ? x.v > line : x.v < line;
-      return `<div class="gl"><span class="d">${esc(x.long || "—")}</span><span class="o">${logoImg(league, x.opp)}${esc(x.ha)} ${esc(abbr(league, x.opp) || "—")}</span><span class="v ${hit ? "y" : "n"}">${x.v}</span></div>`;
+      const tg = x.tgt != null ? `<small class="tg">${x.tgt} tgt</small>` : "";
+      return `<div class="gl"><span class="d">${esc(x.long || "—")}</span><span class="o">${logoImg(league, x.opp)}${esc(x.ha)} ${esc(abbr(league, x.opp) || "—")}</span><span class="v ${hit ? "y" : "n"}">${x.v}${tg}</span></div>`;
     }).join("")}</div>`;
   }
   function curveChart(mean, sd, line, side, marks) {
@@ -504,7 +514,8 @@
   function openPlayer(r) {
     if (!r) return;
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over", w = when(r.commence_time);
-    const glog = gameLog(r), vals = glog.map((x) => x.v);
+    const glog = gameLog(r), vals = glog.map((x) => x.v), tgs = glog.map((x) => x.tgt).filter((x) => x != null);
+    const tgLine = tgs.length ? ` · ${(tgs.reduce((a, b) => a + b, 0) / tgs.length).toFixed(1)} targets/g` : "";
     const others = state.rows.filter((x) => x.event_id === r.event_id && x.market === r.market && x.side === r.side && normName(x.player_ref) === normName(r.player_ref));
     const cmp = others.map((x) => `<div class="r ${x === r ? "me" : ""}"><span><span class="sw" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${DOT[x.book] || "#94A3B8"};margin-right:6px"></span>${esc(bookName(x.book))}<small> · ${x.dfs ? "needs " + pct(x.breakeven_p) : odds(x.price)}</small></span><b>${x.line}</b><small>${pct(x.p_model)}</small></div>`).join("")
       + (r.ref_book && r.ref_line != null ? `<div class="r"><span>${esc(bookName(r.ref_book))}<small> · sportsbook reference</small></span><b>${r.ref_line}</b><small>ref</small></div>` : "");
@@ -519,7 +530,7 @@
           <div class="sub2">${ctxLine(r)}${r.status ? ` · <span class="st ${r.status === "OUT" ? "out" : "q"}">${esc(r.status)}</span>` : ""}</div>
           <div class="subrow">${verdictChip(r)}${movement(r)}</div></div>
       </div>
-      <div class="pickband"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${over ? "OVER" : "UNDER"} ${r.line}</div>
+      <div class="pickband"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${isTD(r) ? (over ? "YES" : "NO") : `${over ? "OVER" : "UNDER"} ${r.line}`}</div>
           <div style="font-size:12px;color:var(--ink-3)">best estimate ${pct(r.p_model)} · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</div>
           ${r.p_market != null && !r.dfs ? `<div style="font-size:12px;color:${r.off_market ? "var(--accent-2)" : "var(--ink-3)"}">market ${pct(r.p_market)} (${esc(r.market_books || "")})${r.off_market ? " · off-market" : ""}</div>` : ""}
           ${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? `<div style="font-size:12px;font-weight:700;margin-top:2px">Suggested stake $${stakeFor(r.p_model, r.price)}</div>` : ""}</div>
@@ -527,7 +538,7 @@
       ${glancePanel(r)}
       ${ranksPanel(r)}
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
-      <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
+      <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${isTD(r) ? `TD in ${vals.filter((v) => v > 0).length} of ${vals.length}` : `${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}`}${tgLine}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
       ${r.form_sd ? `<div class="panel"><h3><span>Projection range</span><span style="text-transform:none;letter-spacing:0">shaded = your side</span></h3>${curveChart(r.proj_mean ?? r.form_mean, r.proj_sd || r.form_sd, Number(r.line), r.side, marks)}</div>` : ""}
       <div class="panel"><h3><span>Chances</span><span style="text-transform:none;letter-spacing:0">tick = break-even</span></h3>${meters(r, be)}</div>
       ${others.length > 1 || r.ref_book ? `<div class="panel"><h3>Lines across apps</h3><div class="cmp">${cmp}</div></div>` : ""}
@@ -560,7 +571,7 @@
     x.fillStyle = "#EAF0F7"; x.font = font(800, 64); x.fillText("ARCHER", 230, 150); x.fillStyle = "#34D399"; x.font = font(600, 26, "Inter, sans-serif"); x.fillText("A N A L Y T I C S", 232, 190);
     x.fillStyle = "#EAF0F7"; x.font = font(700, 110); x.fillText(r.player_ref, 80, 470);
     x.fillStyle = "#A5B3C6"; x.font = font(500, 40, "Inter, sans-serif"); x.fillText(`${r.market_label || LABEL[r.market] || r.market} · ${bookName(r.book)}${r.opponent ? " · vs " + r.opponent : ""}`, 84, 540);
-    x.fillStyle = r.side === "over" ? "#34D399" : "#7CB4FB"; x.font = font(800, 200); x.fillText(`${r.side === "over" ? "OVER" : "UNDER"} ${r.line}`, 76, 800);
+    x.fillStyle = r.side === "over" ? "#34D399" : "#7CB4FB"; x.font = font(800, 200); x.fillText(isTD(r) ? (r.side === "over" ? "YES" : "NO") : `${r.side === "over" ? "OVER" : "UNDER"} ${r.line}`, 76, 800);
     x.fillStyle = "#EAF0F7"; x.font = font(700, 120); x.fillText(pct(r.p_model), 80, 1010);
     x.fillStyle = "#A5B3C6"; x.font = font(500, 36, "Inter, sans-serif"); x.fillText(`best estimate · needs ${pct(r.breakeven_p)}`, 84, 1070);
     x.fillStyle = "#F59E0B"; x.font = font(700, 30, "Inter, sans-serif"); x.fillText("UNVALIDATED MODEL · NOT BETTING ADVICE", 84, 1270);
@@ -768,14 +779,37 @@
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
       ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
       ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · unvalidated</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
+      ${tdPanel(rows, league)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
       ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3>Player projections</h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
     const gp = $("#gprops", s);
-    if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${r.side === "over" ? "O" : "U"} ${r.line} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
+    if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
     s.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-gleg]"); if (b) { toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
       const p = e.target.closest("[data-gp]"); if (p) openPlayer(rows[Number(p.dataset.gp)]);
+      const td = e.target.closest("[data-td]"); if (td) openPlayer(state.tdRows[Number(td.dataset.td)]);
     });
+  }
+  // ADR-0062: every listed scorer in one table - anytime and first TD side by side
+  function tdPanel(rows, league) {
+    const by = new Map();
+    rows.filter((r) => isTD(r) && r.side === "over").forEach((r) => {
+      const k = normName(r.player_ref), x = by.get(k) || { r, any: null, first: null };
+      if (r.market === "player_anytime_td") x.any = r; else x.first = r;
+      x.r = x.any || x.first; by.set(k, x);
+    });
+    const list = [...by.values()].sort((a, b) => (b.r.proj_mean ?? -1) - (a.r.proj_mean ?? -1) || (a.r.price ?? 0) - (b.r.price ?? 0)).slice(0, 18); // most expected TDs first
+    if (!list.length) return "";
+    state.tdRows = [];
+    const cell = (r) => {
+      if (!r) return `<span class="tdc na">—</span>`;
+      const i = state.tdRows.push(r) - 1, val = r.edge > 0 && !r.market_gap && r.p_matchup_raw != null;
+      return `<span class="tdc ${val ? "val" : ""} ${r.market_gap ? "gap" : ""}" data-td="${i}"><b>${odds(r.price)}</b><small>${r.p_matchup_raw != null ? "model " + pct(r.p_matchup_raw) : "no model"}${r.market_gap ? " · gap" : ""}</small></span>`;
+    };
+    return `<div class="panel"><h3><span>Touchdowns</span><span style="text-transform:none;letter-spacing:0">Hard Rock · tap a price</span></h3>
+      <div class="tdt"><div class="tdh"><span>Player</span><span>Anytime</span><span>First TD</span></div>
+      ${list.map((x) => `<div class="tdr">${avatar(x.r.player_ref, league, x.r.form_team, "sm")}<div class="who"><b>${esc(x.r.player_ref)}</b><small>${esc([x.r.form_position, abbr(league, x.r.form_team)].filter(Boolean).join(" · "))}${x.r.proj_mean != null ? ` · ${Number(x.r.proj_mean).toFixed(2)} exp. TDs` : ""}</small></div>${cell(x.any)}${cell(x.first)}</div>`).join("")}</div>
+      <div class="foot" style="margin:6px 0 0">Model: targets and carries × a shrunk TD rate, scaled by the team's implied points; first TD = his share of the game's expected TDs. Calibrated within about a point on 2023-25. Green = our number, pulled toward Hard Rock's price, still beats it. "gap" = model and price disagree 2x+ (check the depth chart). One view only: leans, graded weekly.</div></div>`;
   }
 
   // ------------------------------------------------------------------ slip & pick'em builder
@@ -866,7 +900,7 @@
       ${apps.length > 1 ? `<div class="note-card" style="margin:8px 0 0">These picks are on different apps — an entry has to be on one app.</div>` : ""}
       ${same ? (joint ? `<div class="note-card" style="margin:8px 0 0">Picks in the same game move together. Priced from how these stats have moved together in past games: <b>${pct(joint.all, 1)}</b> all hit, vs ${pct(joint.ind, 1)} if they were unrelated.</div>` : `<div class="note-card" style="margin:8px 0 0;color:var(--amber)">Two picks share a game; there is no history for this pairing, so they are priced as unrelated.</div>`) : ""}
       ${opts.length ? `<div style="margin-top:12px">${opts.map((o, k) => `<div class="entry ${k === 0 && o.ev > 0 ? "best" : ""}"><div><b>${esc(bookName(o.app))} ${picks.length}-pick ${o.kind}${o.kind === "Power" ? " · " + o.m + "x" : ""}</b><small>${esc(o.note)}</small></div><div class="ev ${o.ev >= 0 ? "pos" : "neg"}">${o.ev >= 0 ? "+" : ""}${(o.ev * 100).toFixed(1)}%<small style="display:block;font-size:11px;color:var(--ink-3)">expected return</small></div></div>`).join("")}<div class="foot" style="margin:4px 0 0">Payouts come from config — check them in your app. ${joint ? "Same-game picks priced together; different games independent." : "Picks treated as independent."}</div></div>` : picks.length === 1 ? `<div class="foot" style="margin:8px 0 0">Add one or two more picks to see entry values.</div>` : ""}
-      ${partners.length ? `<h3 style="margin-top:14px">Good partners on ${esc(bookName(app))}</h3>${partners.map((r, k) => `<div class="partner">${avatar(r.player_ref, leagueOf(r), r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${r.side === "over" ? "O" : "U"} ${r.line} · ${pct(r.p_model)} · different game</small></div><button class="btn small" data-partner="${k}">+ Add</button></div>`).join("")}` : ""}
+      ${partners.length ? `<h3 style="margin-top:14px">Good partners on ${esc(bookName(app))}</h3>${partners.map((r, k) => `<div class="partner">${avatar(r.player_ref, leagueOf(r), r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${pct(r.p_model)} · different game</small></div><button class="btn small" data-partner="${k}">+ Add</button></div>`).join("")}` : ""}
     </div>`;
   }
   $("#builder").addEventListener("click", (e) => { const b = e.target.closest("[data-partner]"); if (b) toggleLeg(propLeg(state.partners[Number(b.dataset.partner)])); });
@@ -1103,7 +1137,7 @@
     const byDay = {}; pick.forEach((r) => { const d = String(r.commence_time || "").slice(0, 10); (byDay[d] = byDay[d] || []).push(r); });
     const days = Object.keys(byDay).sort().reverse();
     $("#recList").innerHTML = days.length ? days.map((d) => `<div class="dayh">${new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</div>` + byDay[d].map((r) => `<div class="res"><span class="mk2 ${r.grade === "won" ? "w" : r.grade === "lost" ? "l" : "p"}">${r.grade === "won" ? "✓" : r.grade === "lost" ? "✗" : "–"}</span>
-      <div><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${r.side === "over" ? "O" : "U"} ${r.line} · ${esc(bookName(r.book))} · ${pct(r.p_model)}</small></div><div class="act">${r.actual ?? "—"}<small style="display:block;font-size:11px;color:var(--ink-3)">actual</small></div></div>`).join("")).join("")
+      <div><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))} · ${pct(r.p_model)}</small></div><div class="act">${r.actual ?? "—"}<small style="display:block;font-size:11px;color:var(--ink-3)">actual</small></div></div>`).join("")).join("")
       : `<div class="empty" style="padding:14px">No graded picks for this filter yet.</div>`;
   }
   $("#recFilters").addEventListener("click", (e) => { const b = e.target.closest("[data-rec]"); if (!b) return; state.recFilter = b.dataset.rec; $$("#recFilters .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); renderRecord(); });
@@ -1480,7 +1514,12 @@
   const volTag = (r) => (r.volume === "none" ? `<span class="tag warn" title="The projection is below anything the model was tested on">Too thin to price</span>`
     : r.volume === "low" && r.low_ok ? `<span class="tag warn" title="${esc(r.low_why || "")}">Low volume · market-backed</span>`
     : r.volume === "low" ? `<span class="tag warn" title="A backup's or tiny line: one or two touches decide it">Low volume · volatile</span>`
-    : r.market_gap ? `<span class="tag warn" title="The projection is 40%+ away from the line: the book may know a role change">Check news · big gap</span>` : "");
+    : r.market_gap ? `<span class="tag warn" title="${isTD(r) ? "Model and price disagree by 2x or more" : "The projection is 40%+ away from the line"}: the book may know a role change">Check news · big gap</span>` : "");
+  const depthTag = (r) => { // ADR-0063: the depth chart moved his projected volume
+    if (!r.depth_note) return "";
+    const m = /depth chart (\w+)/.exec(r.depth_note), down = /x0\./.test(r.depth_note);
+    return `<span class="tag ${down ? "warn" : "good"}" title="${esc(r.depth_note)}">${down ? "▼" : "▲"} ${esc(m ? "Depth " + m[1] : "Role")}</span>`; // college: last game's role
+  };
   const mktTag = (r) => (r.off_market && !r.dfs ? `<span class="tag mkt">Off-market +${(r.market_edge * 100).toFixed(1)}</span>` : "");
 
   // ---- bankroll: stake guide and a daily loss limit
@@ -1666,7 +1705,7 @@
   function betNow(open) {
     const seen = new Set();
     return open.filter((r) => r.p_model != null && (!r.volume || r.low_ok) && !r.market_gap && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
-        && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && r.market !== "player_anytime_td")
+        && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && !isTD(r))
       .sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1)))
       .filter((r) => { const k = r.player_ref + r.market + (r.book || ""); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8);
   }
@@ -1716,7 +1755,7 @@
     return out.sort((x, y) => y.lift - x.lift).slice(0, 5);
   }
   function sgpRow(x, i) {
-    const short = (r) => `${esc(r.player_ref)} ${r.side === "over" ? "O" : "U"} ${r.line} ${esc(LABEL[r.market] || "")}`;
+    const short = (r) => `${esc(r.player_ref)} ${sideLine(r)} ${esc(LABEL[r.market] || "")}`;
     return `<div class="trow sgp"><span class="mk2 p">⛓</span><div><b>${short(x.a)}</b><br><b>${short(x.b)}</b>
       <small>model ${pct(x.joint)} together (${pct(x.ind)} if unrelated) · worth it at <b>${odds(toAmerican(1 / x.joint))}</b> or better on Hard Rock</small></div>
       <button class="btn small" data-sgp="${i}">+ Slip</button></div>`;
@@ -1724,7 +1763,7 @@
   function trow(r, extra) {
     const lg = leagueOf(r), w = when(r.commence_time), be = r.breakeven_p ?? 0.524;
     return `<div class="trow" data-key="${esc(rowKey(r))}">${avatar(r.player_ref, lg, r.form_team, "sm")}
-      <div><b>${esc(r.player_ref)}</b> <span style="color:var(--ink-3);font-weight:600">${r.side === "over" ? "O" : "U"} ${r.line} ${esc(r.market_label || LABEL[r.market] || "")}</span>
+      <div><b>${esc(r.player_ref)}</b> <span style="color:var(--ink-3);font-weight:600">${sideLine(r)} ${esc(r.market_label || LABEL[r.market] || "")}</span>
         <small>${esc(bookName(r.book))}${r.dfs ? " · needs " + pct(be) : " " + odds(r.price)}${w.txt ? " · " + esc(w.txt) : ""}${r.fav ? " · ★" : ""}</small>${extra || ""}</div>
       <div class="pv" style="color:${r.p_model >= be ? "var(--accent-2)" : "var(--ink-2)"}">${pct(r.p_model)}<small style="display:block;color:var(--ink-3)">${r.edge != null ? (r.edge > 0 ? "+" : "") + (r.edge * 100).toFixed(1) : ""}</small></div></div>`;
   }
@@ -1743,6 +1782,9 @@
       .filter((r) => { const k = normName(r.player_ref) + r.market + r.side; if (seenM.has(k)) return false; seenM.add(k); return true; })
       .filter((r) => { const k = r.player_ref + r.market; if (seenSpot.has(k)) return false; seenSpot.add(k); return true; }).slice(0, 5);
     const offm = open.filter((r) => r.off_market && !r.dfs).sort((a, b) => b.market_edge - a.market_edge).slice(0, 3);
+    // ADR-0062: longshots stay in the game table - a +2000 edge is mostly noise
+    const tds = open.filter((r) => isTD(r) && r.side === "over" && !r.market_gap && r.p_matchup_raw != null && (r.edge ?? 0) > 0 && r.price <= (r.market === "player_1st_td" ? 1000 : 600))
+      .sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0)).slice(0, 6);
     const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
     const byKey = new Map(state.rows.map((r) => [rowKey(r), r]));
     const moves = (state.meta.movers || []).map((m) => ({ m, r: byKey.get(rowKey(m)) })).filter((x) => x.r && !when(x.r.commence_time).locked).slice(0, 6);
@@ -1772,6 +1814,7 @@
       spots.length ? sec("Matchup leans", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)).join("") + `<div class="foot" style="margin:4px 0 0">Top-20% matchups where the matchup projection agrees. Leans, not bets: the full probability hasn't cleared break-even.</div>`, `<button id="allMLean">See all</button>`) : "",
       early.length ? sec("Early-line picks · college spreads", early.map((l, i) => `<div class="trow"><span class="mk2 p">⏱</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>model ${Math.abs(l.early.gap)} pts off Hard Rock's line · bet before it moves</small></div><button class="btn small" data-early="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Provisional. When the model was 5+ points off the opener, lines moved its way ${earlyInfo.record ? `and it went ${esc(earlyInfo.record)} (${pct(earlyInfo.hit_at_open)}) at the opener` : ""} on past seasons; nothing is left by the close. Tracked on closing-line value. ${flagTrack()}</div>`) : "",
       offg.length ? sec("Game lines · Hard Rock vs the market", offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>market ${pct(l.mkt.p)}${l.mkt.push ? ` (+${pct(l.mkt.push)} push)` : ""} · EV <b style="color:var(--accent-2)">+${(l.mkt.ev * 100).toFixed(1)}%</b> per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Priced off FanDuel, DraftKings and ESPN Bet at Hard Rock's number (key numbers included). ${flagTrack()}</div>`) : "",
+      tds.length ? sec("Touchdown looks · NFL", tds.map((r) => trow(r, `<span class="chg good">model ${pct(r.p_matchup_raw)} to score${r.market === "player_1st_td" ? " first" : ""} vs ${pct(r.breakeven_p)} priced</span>`)).join("") + `<div class="foot" style="margin:4px 0 0">One view (usage model), pulled toward Hard Rock's price. Leans for small stakes, graded weekly. Big model-vs-price gaps are left out.</div>`, `<button id="allTD">See all</button>`) : "",
       offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
       sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
       moves.length ? sec(`Biggest moves${state.meta.movers[0] && parseStamp(state.meta.movers[0].since) ? " · since " + parseStamp(state.meta.movers[0].since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}`, moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("")) : "",
@@ -1787,6 +1830,7 @@
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#allMLean")) { applyPreset(PRESETS.find((p) => p.id === "mlean")); show("props"); return; }
+      if (e.target.closest("#allTD")) { applyPreset(PRESETS.find((p) => p.id === "td")); show("props"); return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };
