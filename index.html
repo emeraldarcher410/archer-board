@@ -201,8 +201,12 @@
   .av img.face { position: relative; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; display: block; }
   .av .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 20px; color: #fff; letter-spacing: .03em; }
   .av.lg .ini { font-size: 30px; } .av.sm .ini { font-size: 16px; }
-  .av .badge { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; }
-  .av.lg .badge { width: 32px; height: 32px; } .av .badge img { width: 78%; height: 78%; object-fit: contain; }
+  /* team logo on the headshot: its own class - the generic .badge pill (padding, parallelogram
+     clip) shrank it to ~10px */
+  .av .tbadge { position: absolute; right: -6px; bottom: -6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; }
+  .av.lg .tbadge { width: 40px; height: 40px; } .av.sm .tbadge { width: 24px; height: 24px; right: -4px; bottom: -4px; }
+  svg.chart .halo text { paint-order: stroke; stroke: var(--surface); stroke-width: 3.5px; stroke-linejoin: round; }
+  .av .tbadge img { width: 86%; height: 86%; object-fit: contain; }
   .who { min-width: 0; flex: 1; }
   .who .nm { font-weight: 700; font-size: 16.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
   .who .ctx { color: var(--ink-3); font-size: 12.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
@@ -814,6 +818,13 @@
   .trow .pv .pvn { display: block; font: 600 11px Inter, sans-serif; color: var(--ink-3); font-style: normal; }
   .top .prob .probl { display: block; font: 700 10.5px Inter, sans-serif; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; font-style: normal; text-align: right; }
   .trow.gb { cursor: pointer; }
+  .gbv { text-align: right; } .gbv .vt { display: inline-block; font: italic 800 15px var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--accent-2);
+    background: var(--accent-soft); padding: 3px 9px; clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); white-space: nowrap; }
+  .gbv .vt.early { color: var(--blue); background: var(--blue-soft); }
+  .trow.gb { grid-template-columns: 26px 1fr auto; } .trow.gb .gbv .vt { font-size: 13.5px; padding: 3px 8px; }
+  .trow small.p100 { color: var(--accent-2); font-weight: 700; margin-top: 3px; }
+  .trow small.rec { color: var(--ink-3); font-size: 11.5px; margin-top: 3px; font-style: italic; }
+  .warnbar.soft { background: var(--amber-soft); color: var(--amber); border-color: color-mix(in srgb, var(--amber) 35%, transparent); font-size: 12.5px; font-weight: 600; padding: 8px 11px; }
   .gcard.flash { box-shadow: 0 0 0 3px var(--accent-2); transition: box-shadow .3s; }
   /* ADR-0077: tappable players on a game page; stat-log sheet */
   table.pl tr.plrow { cursor: pointer; } table.pl tr.plrow:active td { background: var(--surface-2); }
