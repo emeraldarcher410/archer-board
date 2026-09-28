@@ -439,14 +439,15 @@
 
   // ------------------------------------------------------------------ sheets
   let sheetEl = null;
-  function openSheet(html, full) {
+  function openSheet(html, full, swap) {
+    const had = !!sheetEl;
     closeSheet(true);
-    const s = document.createElement("div"); s.className = `sheet ${full ? "full" : ""}`;
+    const s = document.createElement("div"); s.className = `sheet ${full ? "full" : ""} ${swap && had ? "swap" : ""}`;
     s.innerHTML = `<div class="in" role="dialog">${full ? "" : '<div class="grab"></div>'}${html}</div>`;
     s.addEventListener("click", (e) => { if (e.target === s || e.target.closest("[data-close]")) closeSheet(); });
     document.body.appendChild(s); document.body.classList.add("locked"); sheetEl = s;
     dragToClose(s);
-    history.pushState({ sheet: 1 }, "");
+    if (!(swap && had)) history.pushState({ sheet: 1 }, ""); // a swap reuses the open page's entry
     return s;
   }
   // pull a sheet down to dismiss it, from the grab bar or anywhere while it is scrolled to the top.
@@ -578,7 +579,7 @@
       return `<div class="r"><span>${esc(bk)}<small> · ${pr != null ? odds(pr) : "—"}</small></span><b>${ln}</b><small style="color:${better ? "var(--red)" : worse ? "var(--accent-2)" : "inherit"}">${better ? "better there" : worse ? "Hard Rock better" : "same line"}</small></div>`;
     }).join("");
   }
-  function openPlayer(r) {
+  function openPlayer(r, keep) {
     if (!r) return;
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over", w = when(r.commence_time);
     const glog = gameLog(r), vals = glog.map((x) => x.v), tgs = glog.map((x) => x.tgt).filter((x) => x != null);
@@ -618,13 +619,14 @@
       <div class="panel"><h3><span>Chances</span><span style="text-transform:none;letter-spacing:0">tick = break-even</span></h3>${meters(r, be)}</div>
       ${others.length > 1 || r.ref_book || r.book_lines ? `<div class="panel"><h3>Lines across books</h3><div class="cmp">${cmp}</div></div>` : ""}
       <details class="panel why"><summary><span>Full breakdown</span><span class="chev">›</span></summary><ul class="whys">${(r.why_points || []).map((x) => `<li class="${String(x).startsWith("PFF") ? "pff" : ""}">${esc(x)}</li>`).join("") || `<li>${esc(r.why_long || "—")}</li>`}</ul></details>
-      <div class="actions sticky"><button class="btn primary grow" data-add>${inSlip(r) ? "✓ On your slip" : "+ Add to slip"}</button><button class="btn grow" data-track>Track as single</button></div>`, true);
+      <div class="actions sticky"><button class="btn primary grow" data-add>${inSlip(r) ? "✓ On your slip" : "+ Add to slip"}</button><button class="btn grow" data-track>Track as single</button></div>`, true, !!keep);
+    if (keep) { const box = s.querySelector(".in"); box.scrollTop = keep.scroll || 0; }
     s.addEventListener("click", (e) => {
       if (e.target.closest("[data-add]")) { toggleLeg(propLeg(r)); e.target.closest("[data-add]").textContent = inSlip(r) ? "✓ On your slip" : "+ Add to slip"; renderProps(); }
       if (e.target.closest("[data-track]")) trackSingle(propLeg(r));
       const ov = e.target.closest("[data-ovr]"); if (ov) { setOverride(ov); return; }
       if (e.target.closest("[data-guide]")) { openGuide(); return; }
-      const mk = e.target.closest("[data-mk]"); if (mk) { const x = state.pmRows[Number(mk.dataset.mk)]; if (x && x !== r) { buzz(); openPlayer(x); } return; }
+      const mk = e.target.closest("[data-mk]"); if (mk) { const x = state.pmRows[Number(mk.dataset.mk)]; if (x && x !== r) { buzz(); openPlayer(x, { scroll: s.querySelector(".in").scrollTop }); } return; }
       if (e.target.closest("[data-share]")) shareCard(r);
       if (e.target.closest("[data-target]")) openTarget(r);
       if (e.target.closest("[data-watch]")) {
@@ -816,7 +818,8 @@
   function sbSide(league, id, cls) {
     const t = team(league, id), col = (t && t.color) || "#334155";
     const logo = t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="fb">${esc(abbr(league, id).slice(0, 4))}</span>`;
-    return `<div class="side ${cls}" style="background:linear-gradient(${cls === "h" ? "250deg" : "110deg"}, ${esc(col)}, color-mix(in srgb, ${esc(col)} 55%, #070B12))">${logo}<div class="nm3">${esc((t && (t.nick || t.name)) || id)}<small>${esc((t && t.abbr) || (cls === "h" ? "Home" : "Away"))}</small></div></div>`;
+    const nm = String((t && (t.nick || t.name)) || id), sz = nm.length > 14 ? "xl" : nm.length > 9 ? "l" : "";
+    return `<div class="side ${cls}" style="background:linear-gradient(${cls === "h" ? "250deg" : "110deg"}, ${esc(col)}, color-mix(in srgb, ${esc(col)} 55%, #070B12))">${logo}<div class="nm3 ${sz}">${esc(nm)}<small>${esc((t && t.abbr) || (cls === "h" ? "Home" : "Away"))}</small></div></div>`;
   }
   function countdown(iso) { const w = when(iso); return w.txt ? `<span class="cd ${w.cls}">${esc(w.txt)}</span>` : ""; }
   // ADR-0057: the unit rankings' biggest mismatches in a game, and which way they point.
@@ -2053,7 +2056,9 @@
     // Each section: rows (one html string per row) and a footnote. "All" shows every
     // section with its first rows; a chip shows one section in full (ADR-0068).
     const secs = [
-      { id: "news", icon: "📰", title: "News & injuries", rows: news.rows, head: news.head },
+      // ADR-0076: always there; empty says so instead of the section vanishing
+      { id: "news", icon: "📰", title: "News & injuries", n: news.rows.length, head: news.head,
+        rows: news.rows.length ? news.rows : [`<div class="tempty">No news for upcoming ${state.league === "cfb" ? "college" : "NFL"} games right now. The reader checks each NFL game ~2 days and ~1 hour before kickoff, and the top college games ~3 hours before; news stays here until its game is played.</div>`] },
       { id: "td", icon: "🏈", title: "Touchdowns", rows: tdLikely.map((r) => trow(r, `<span class="chg ${r._d > 0.02 ? "good" : ""}">we give ${pct(r.p_matchup_raw)} · books ${pct(r.p_book)}${r._d > 0.02 ? ` · we're +${(r._d * 100).toFixed(0)} higher` : r._d < -0.02 ? ` · we're ${(r._d * 100).toFixed(0)} lower` : ""}</span>`)),
         foot: `Most likely to score today by our read (red-zone and goal-line role, team's expected points, who's out), next to the books' chance with their margin out.`, more: `<button class="btn small" id="allTD" style="margin-top:6px">Open the touchdown board</button>` },
       { id: "hr", icon: "💵", title: "Best on Hard Rock", rows: hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">Hard Rock pays more than the market</span>` : ""}`)) },
@@ -2069,7 +2074,7 @@
       { id: "alerts", icon: "🔔", title: "Your line alerts", rows: state.targets.map((t) => `<div class="trow"><span class="mk2 p">🎯</span><div><b>${esc(t.label || t.player_ref)}</b><small>${t.line != null ? `line ${t.side === "over" ? "≤" : "≥"} ${t.line}` : ""}${t.line != null && t.price != null ? " or " : ""}${t.price != null ? `price ≥ ${odds(t.price)}` : ""} · ${esc(bookName(t.book))}</small></div><button class="btn small ghost danger" data-untarget="${esc(t.id)}">✕</button></div>`) },
     ].filter((x) => x.rows.length);
     const opened = secs.find((x) => x.id === state.todayOpen);
-    const chips = secs.length ? `<div class="tchips"><button class="tchip ${opened ? "" : "on"}" data-tile="">All</button>${secs.map((x) => `<button class="tchip ${opened && opened.id === x.id ? "on" : ""}" data-tile="${x.id}"><span>${x.icon}</span>${esc(x.title)}<b>${x.rows.length}</b></button>`).join("")}</div>` : "";
+    const chips = secs.length ? `<div class="tchips"><button class="tchip ${opened ? "" : "on"}" data-tile="">All</button>${secs.map((x) => `<button class="tchip ${opened && opened.id === x.id ? "on" : ""}" data-tile="${x.id}"><span>${x.icon}</span>${esc(x.title)}<b>${x.n ?? x.rows.length}</b></button>`).join("")}</div>` : "";
     const full = (x) => `<div class="tsec"><h3><span>${x.icon} ${esc(x.title)}</span></h3>${x.head || ""}${x.rows.join("")}${x.foot ? `<div class="foot" style="margin:4px 0 0">${x.foot}</div>` : ""}${x.more || ""}</div>`;
     const preview = (x) => `<div class="tsec"><h3><span>${x.icon} ${esc(x.title)}</span>${x.rows.length > 2 ? `<button data-tile="${x.id}">See all ${x.rows.length}</button>` : ""}</h3>${x.rows.slice(0, 2).join("")}</div>`;
     el.innerHTML = [
@@ -2209,6 +2214,7 @@
   const TABS = ["today", "props", "games", "slip", "bets", "record"];
   function show(tab) {
     if (!TABS.includes(tab)) tab = "today";
+    if (sheetEl) closeSheet(); // "View slip" from a player page: go there, don't leave the page on top
     state.tab = tab;
     const hl = tab === "record" ? "bets" : tab;
     $$(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === hl)));

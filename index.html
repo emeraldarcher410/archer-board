@@ -762,7 +762,13 @@
   .sbh .side.a { clip-path: polygon(0 0, 100% 0, calc(100% - var(--slash)) 100%, 0 100%); margin-right: calc(var(--slash) * -1); padding-right: calc(6px + var(--slash)); }
   .sbh .side.h { clip-path: polygon(var(--slash) 0, 100% 0, 100% 100%, 0 100%); margin-left: calc(var(--slash) * -1); padding-left: calc(6px + var(--slash)); }
   .sbh .mid3 { position: relative; z-index: 1; clip-path: polygon(var(--slash) 0, 100% 0, calc(100% - var(--slash)) 100%, 0 100%); padding: 8px calc(10px + var(--slash)); }
-  .sbh .side .nm3 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 17px; text-transform: uppercase; letter-spacing: .03em; }
+  .sbh .side .nm3 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 17px; text-transform: uppercase; letter-spacing: .03em;
+    white-space: normal; text-overflow: clip; overflow-wrap: normal; word-break: keep-all; line-height: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding: 0 1px; }
+  .sbh .side .nm3.l { font-size: 13.5px; letter-spacing: 0; } .sbh .side .nm3.xl { font-size: 12px; letter-spacing: 0; }
+  .sbh .side.a { padding-left: 4px; padding-right: calc(2px + var(--slash)); } .sbh .side.h { padding-right: 4px; padding-left: calc(2px + var(--slash)); }
+  @media (max-width: 400px) { .sbh .sc2 { font-size: 27px; } .sbh .mid3 { padding-left: calc(6px + var(--slash)); padding-right: calc(6px + var(--slash)); } }
+  /* switching markets on a player page: no slide-in, same scroll position */
+  .sheet.swap, .sheet.swap .in { animation: none; }
   .sbh .sc2 { font-size: 32px; }
   .lines .hd { font-family: var(--display); font-style: italic; font-size: 13px; letter-spacing: .08em; }
   .cell .top2 { font-family: var(--display); font-style: italic; font-size: 17px; font-weight: 800; }
