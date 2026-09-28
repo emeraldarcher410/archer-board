@@ -22,10 +22,21 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#070B12">
 <script>try { var t = JSON.parse(localStorage.getItem("archer-theme") || '"auto"'); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="preload" href="./fonts/barlow-condensed-latin-800-italic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="./fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  /* fonts are self-hosted (OFL, site/fonts): faster, and they work offline (ADR-0072) */
+  @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/barlow-condensed-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/barlow-condensed-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 800; font-display: swap; src: url(./fonts/barlow-condensed-latin-800-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 700; font-display: swap; src: url(./fonts/barlow-condensed-latin-700-italic.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 800; font-display: swap; src: url(./fonts/barlow-condensed-latin-800-italic.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 900; font-display: swap; src: url(./fonts/barlow-condensed-latin-900-italic.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap; src: url(./fonts/inter-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: swap; src: url(./fonts/inter-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/inter-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/inter-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 800; font-display: swap; src: url(./fonts/inter-latin-800-normal.woff2) format("woff2"); }
   :root {
     color-scheme: dark;
     --bg: #070B12; --bg-glow: #0E1A2E;
@@ -592,6 +603,20 @@
   .seg2 button { border: 0; background: transparent; color: var(--ink-3); font-weight: 700; font-size: 14px; border-radius: 10px; min-height: 36px; }
   .seg2 button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
   .tsec { margin: 0 0 16px; }
+  .tdb-r .nums .us { font: 700 20px var(--display); color: var(--ink); }
+  .dtag { display: inline-block; margin-top: 3px; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--ink-3); }
+  .dtag.up { background: color-mix(in srgb, var(--accent-2) 16%, transparent); color: var(--accent-2); }
+  .dtag.dn { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+  .tdb-r .val small { display: block; font-size: 9px; color: var(--ink-3); font-weight: 600; }
+  .ladder .lr { display: grid; grid-template-columns: 1.3fr 1fr auto 1.1fr; gap: 8px; align-items: center; padding: 6px 4px; border-radius: 10px; font-size: 13px; }
+  .ladder .lr.cur { background: var(--surface-2); font-weight: 700; }
+  .ladder .ll small { color: var(--ink-3); font-weight: 600; font-size: 10.5px; }
+  .ladder .lb { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; } .ladder .lb i { display: block; height: 100%; background: var(--accent-2); }
+  .ladder .lr b { font: 700 15px var(--display); } .ladder .lo { text-align: right; color: var(--ink-3); font-size: 12px; }
+  .tchips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 14px; padding: 2px 16px; scrollbar-width: none; }
+  .tchips::-webkit-scrollbar { display: none; }
+  .tchip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 13px Inter, sans-serif; white-space: nowrap; }
+  .tchip b { font: 700 12px var(--display); color: var(--ink-3); } .tchip.on { background: var(--ink); color: var(--bg, #fff); border-color: var(--ink); } .tchip.on b { color: inherit; opacity: .7; }
   .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
   .tile { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; text-align: left; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 13px/1.2 Inter, sans-serif; }
   .tile .ti { font-size: 16px; } .tile .tn { font: 700 13px var(--display); color: var(--ink-3); background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
@@ -670,6 +695,119 @@
   .vs-t td { padding: 8px 4px; border-top: 1px solid var(--line); } .vs-t td:nth-child(2), .vs-t td:nth-child(3) { text-align: center; width: 64px; }
   .rank-li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
   .rank-li i { font-style: normal; } .rank-li.up i { color: var(--accent-2); } .rank-li.dn i { color: var(--red); }
+  /* ---------- v4: sportier (ADR-0072) ----------
+     Broadcast look: condensed italic display type for titles and every big number, slanted
+     (parallelogram) tags and markers, team-colour slashes, a faint pinstripe on the page,
+     scoreboard tiles. Colours and spacing tokens are unchanged, so both themes keep working. */
+  :root { --stripe-c: rgba(255,255,255,.018); --slash: 14px; --dsp-i: italic 800 1em var(--display); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --stripe-c: rgba(11,18,32,.022); } }
+  :root[data-theme="light"] { --stripe-c: rgba(11,18,32,.022); }
+  body {
+    background:
+      radial-gradient(900px 420px at 88% -140px, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%) no-repeat,
+      radial-gradient(1100px 520px at 10% -180px, var(--bg-glow), transparent 70%) no-repeat,
+      repeating-linear-gradient(118deg, transparent 0 26px, var(--stripe-c) 26px 27px),
+      var(--bg);
+    background-attachment: scroll, scroll, fixed, scroll;
+  }
+  /* titles: italic, uppercase, tight */
+  .page-h h1, .sh-top h2, .sec-h h2, .slate .d, .hero .nm2, .guide h2, .ck-head b {
+    font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: .005em; }
+  .page-h h1 { font-size: 36px; }
+  .page-h h1::after { content: ""; display: block; width: 44px; height: 4px; margin-top: 6px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transform: skewX(-24deg); transform-origin: left; }
+  .brand .wm b { font-style: italic; font-weight: 800; }
+  /* every big number reads like a scoreboard */
+  .line, .ring .rv, .top .big, .top .prob, .top .rk, .bigpick .l2, .bigpick .pr2 b, .pickband .l2, .kpi b, .trow .pv, .sbh .sc2, .ghero .sc,
+  .gl .v, .rk-n, .lvh .lvp, .entry .ev, .res .act, .tdb-r .nums b, .tdb-r .nums .us, .mchip b, .slate .st2 b, .tdc b, .ladder .lr b, .projc b, .cmp .r b,
+  .edge, .guide dt, .pt b { font-style: italic; }
+  /* section labels get a slanted accent slash */
+  .sec-h h2::before, .tsec > h3 > span:first-child::before, .panel h3 > span:first-child::before, .panel > h3:not(:has(span))::before, .tdb-h::before {
+    content: ""; display: inline-block; width: 4px; height: .95em; margin-right: 8px; vertical-align: -1px; background: var(--accent-2); transform: skewX(-18deg); border-radius: 1px; }
+  .panel h3, .tsec > h3 { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: .07em; color: var(--ink-2); }
+  .panel h3 > span:last-child:not(:first-child) { font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+  /* tags, verdicts and small status marks as parallelograms */
+  .verdict, .bst, .nk, .st, .chg, .dtag, .cd, .badge, .clv, .mv, .line .dir, .pill.warn {
+    border-radius: 3px; clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding-left: 10px; padding-right: 10px; }
+  .verdict { font-family: var(--display); font-style: italic; font-size: 13px; letter-spacing: .06em; padding-top: 3px; padding-bottom: 3px; }
+  /* O / U stay in Inter: in the italic condensed face an O reads as a zero */
+  .line .dir { font-family: Inter, system-ui, sans-serif; font-style: normal; font-size: 12.5px; font-weight: 800; }
+  .ou { display: inline-block; font: normal 800 .5em/1 Inter, system-ui, sans-serif; padding: 4px 6px 3px; margin-right: 6px; vertical-align: .32em; border-radius: 3px;
+    background: var(--accent-soft); color: var(--accent-2); clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
+  .pill.warn { font-family: var(--display); font-style: italic; font-size: 13px; }
+  /* controls: condensed, uppercase */
+  .seg button, .seg2 button, .chip, .tchip, .gpill, .fbtn, .tabbar button, .presets .chip, .applied .chip {
+    font-family: var(--display); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+  .seg button { font-size: 15px; font-style: italic; } .seg2 button { font-size: 16px; font-style: italic; }
+  .chip { font-size: 14.5px; } .tchip { font-size: 14.5px; } .fbtn { font-size: 15px; }
+  .chip[aria-pressed="true"], .tchip.on { box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+  .btn.primary { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
+  .tabbar button { font-size: 11.5px; letter-spacing: .08em; }
+  .tabbar .ind { width: 36px; height: 4px; clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); border-radius: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  /* prop cards: a team-colour slash in the corner */
+  .card::before { width: 4px; }
+  .card::after { content: ""; position: absolute; top: 0; right: 0; width: 120px; height: 100%; pointer-events: none;
+    background: linear-gradient(118deg, transparent 0 48%, color-mix(in srgb, var(--tc, var(--line-2)) 16%, transparent) 48% 56%, transparent 56% 62%, color-mix(in srgb, var(--tc, var(--line-2)) 9%, transparent) 62% 66%, transparent 66%); }
+  .card > * { position: relative; z-index: 1; }
+  /* top plays: jersey-style outlined rank, stripes */
+  .top { border-radius: 16px; }
+  .top::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(118deg, transparent 0 14px, rgba(255,255,255,.035) 14px 16px); mask-image: linear-gradient(90deg, transparent 35%, #000); -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000); }
+  .top .rk { font-size: 64px; top: -4px; right: 10px; color: transparent; -webkit-text-stroke: 1.5px var(--ink); opacity: .22; }
+  .top .big, .top .prob { font-size: 30px; }
+  /* slate: stadium-lights header */
+  .slate { position: relative; overflow: hidden; border-radius: 18px; }
+  .slate::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(118deg, transparent 0 18px, rgba(255,255,255,.03) 18px 20px); }
+  .slate > * { position: relative; z-index: 1; }
+  .slate .d { font-size: 30px; }
+  /* scoreboard game cards: team panels meet on a slant */
+  .sbh .side.a { clip-path: polygon(0 0, 100% 0, calc(100% - var(--slash)) 100%, 0 100%); margin-right: calc(var(--slash) * -1); padding-right: calc(6px + var(--slash)); }
+  .sbh .side.h { clip-path: polygon(var(--slash) 0, 100% 0, 100% 100%, 0 100%); margin-left: calc(var(--slash) * -1); padding-left: calc(6px + var(--slash)); }
+  .sbh .mid3 { position: relative; z-index: 1; clip-path: polygon(var(--slash) 0, 100% 0, calc(100% - var(--slash)) 100%, 0 100%); padding: 8px calc(10px + var(--slash)); }
+  .sbh .side .nm3 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 17px; text-transform: uppercase; letter-spacing: .03em; }
+  .sbh .sc2 { font-size: 32px; }
+  .lines .hd { font-family: var(--display); font-style: italic; font-size: 13px; letter-spacing: .08em; }
+  .cell .top2 { font-family: var(--display); font-style: italic; font-size: 17px; font-weight: 800; }
+  .cell button { font-family: var(--display); text-transform: uppercase; letter-spacing: .05em; font-size: 13px; }
+  .wp { height: 10px; border-radius: 2px; } .wp span + span { clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%); margin-left: -6px; }
+  /* player sheet: slanted hero, pick band as a scoreboard */
+  .hero.v3 { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 28px), 0 100%); border-radius: 20px 20px 0 0; padding-bottom: 40px; }
+  .hero.v3::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(118deg, transparent 0 16px, rgba(255,255,255,.045) 16px 18px); mask-image: linear-gradient(180deg, #000, transparent 85%); -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); }
+  .hero.v3 .nm2 { font-size: 36px; line-height: .95; }
+  .hero.v3 .wm2 { font-style: italic; font-size: 110px; top: -6px; color: transparent; -webkit-text-stroke: 2px #fff; opacity: .16; }
+  .pickband { grid-template-columns: 1fr auto; margin: -40px 6px 12px; border-radius: 16px; border-top: 3px solid var(--accent-2); }
+  .pickband .l2 { font-size: 46px; font-weight: 800; line-height: .95; margin-top: 2px; }
+  .pickband .l2 em { font-style: italic; color: var(--accent-2); }
+  .ptiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+  .pt { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px 6px; min-width: 0; }
+  .pt b { display: block; font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; }
+  .pt:first-child b { color: var(--accent-2); } .pt b small { font-size: .6em; color: var(--ink-3); margin-left: 1px; }
+  .pt span { display: block; font-size: 10.5px; line-height: 1.2; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+  /* small print inside italic numbers stays upright (Inter has no true italic here) */
+  .trow .pv small, .top .mk3, .ring .rv small, .entry .ev small, .res .act small, .gl .v .tg, .kpi span, .pt b small, .bigpick .pr2 span { font-style: normal; }
+  .pfoot { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); }
+  .mstrip { margin-top: 0; }
+  .mchip { border-radius: 10px; }
+  .mchip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .panel.form h3 .hr b { font-family: var(--display); font-style: italic; font-size: 16px; color: var(--accent-2); }
+  .panel.form .chart .lbl2 { font-family: "Barlow Condensed", Inter, sans-serif; font-style: italic; font-weight: 800; font-size: 13px; }
+  details.gbg { margin-top: 6px; border-top: 1px solid var(--line); }
+  details.gbg summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 10px 2px 2px; font-family: var(--display); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; font-size: 14px; color: var(--ink-2); }
+  details.gbg summary::-webkit-details-marker { display: none; }
+  details.gbg .chev { font-size: 18px; transition: transform .2s; } details.gbg[open] .chev { transform: rotate(90deg); }
+  details.gbg .glog { border-top: 0; }
+  .panel.glance .gh { font-size: 16.5px; }
+  .actions.sticky { position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom)); z-index: 3; margin: 14px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+  /* kpis and record: scoreboard tiles */
+  .kpi { border-top: 3px solid var(--line-2); border-radius: 12px; }
+  .kpi.good { border-top-color: var(--accent-2); } .kpi.bad { border-top-color: var(--red); }
+  .kpi b { font-size: 24px; }
+  .rk-n { clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); border-radius: 2px; }
+  /* splash */
+  .splash .w { font-style: italic; }
+  /* ADR-0073: bet now / can wait - rare by design */
+  .verdict.now { background: linear-gradient(135deg, #F97316, #F2C14E); color: #231500; margin-left: 6px; }
+  .timing { grid-column: 1 / -1; font-size: 12.5px; font-weight: 700; padding: 7px 10px; border-radius: 10px; }
+  .timing.now { background: color-mix(in srgb, #F97316 16%, transparent); color: #F59E0B; }
+  .timing.wait { background: var(--blue-soft); color: var(--blue); }
   @media (min-width: 720px) { .kpi b { font-size: 26px; } .top { flex-basis: 300px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
