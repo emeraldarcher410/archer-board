@@ -809,6 +809,16 @@
   .rk-n { clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); border-radius: 2px; }
   /* splash */
   .splash .w { font-style: italic; }
+  /* ADR-0078: labelled chances; best game bets */
+  .trow .pv .pvl { display: block; font: 700 10.5px Inter, sans-serif; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; font-style: normal; }
+  .trow .pv .pvn { display: block; font: 600 11px Inter, sans-serif; color: var(--ink-3); font-style: normal; }
+  .top .prob .probl { display: block; font: 700 10.5px Inter, sans-serif; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; font-style: normal; text-align: right; }
+  .trow.gb { cursor: pointer; }
+  .gcard.flash { box-shadow: 0 0 0 3px var(--accent-2); transition: box-shadow .3s; }
+  /* ADR-0077: tappable players on a game page; stat-log sheet */
+  table.pl tr.plrow { cursor: pointer; } table.pl tr.plrow:active td { background: var(--surface-2); }
+  table.pl .chev2 { color: var(--ink-3); font-weight: 700; margin-left: 2px; }
+  table.pl tr.avg td { font-weight: 800; border-bottom: 0; color: var(--ink); }
   /* ADR-0073: bet now / can wait - rare by design */
   .verdict.now { background: linear-gradient(135deg, #F97316, #F2C14E); color: #231500; margin-left: 6px; }
   .timing { grid-column: 1 / -1; font-size: 12.5px; font-weight: 700; padding: 7px 10px; border-radius: 10px; }
@@ -892,6 +902,7 @@
       <button class="chip" data-day="tomorrow" aria-pressed="false">Tomorrow</button>
       <button class="chip" data-day="all" aria-pressed="true">All games</button>
     </div>
+    <div id="gBest"></div>
     <div class="note-card" id="modelNote"></div>
     <main id="games"><div class="sk"></div><div class="sk"></div></main>
     <div class="foot">Model score comes from team ratings built on past results only — it never sees a betting line. Tap a game for its matchup page.</div>

@@ -49,7 +49,7 @@
   const state = {
     tab: "props", league: store.get("archer-league", "nfl"), q: "", rows: [], meta: {}, games: {}, results: null, history: null, assets: null,
     f: Object.assign({ agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" }, store.get("archer-filters", {})),
-    day: "all", betFilter: "open", recFilter: "fav",
+    day: "all", betFilter: "open", recFilter: "fav", gpl: [],
     slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
     watch: new Set(store.get("archer-watch", [])), hidden: new Set(), asOf: null,
   };
@@ -281,7 +281,7 @@
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
         <div class="who2">${avatar(r.player_ref, lg, r.form_team, "sm")}<div class="who"><div class="nm">${esc(r.player_ref)}</div><div class="ctx">${ctxLine(r)}</div></div></div>
-        <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}</span></div>
+        <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}<small class="probl">${isTD(r) ? "to score" : "to hit"}</small></span></div>
         <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}</div></div>`;
     }).join("") : `<div class="top empty2">No favorites right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div>`;
     state.topRows = favs;
@@ -506,23 +506,48 @@
         date: d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : "", long: d && !isNaN(d) ? d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }) : "" };
     });
   }
-  function gameLogChart(games, line, side) {
-    if (!games.length) return "";
-    const g = games.slice().reverse(); // oldest -> newest
-    const W = 340, H = 186, top = 18, base = 132, left = 44, pad = 12, n = g.length, mx = Math.max(line * 1.4, ...g.map((x) => x.v)) || 1;
-    const bw = (W - left - pad) / n, y = (v) => base - (v / mx) * (base - top);
+  // One chart for both player pages (ADR-0079): past games as solid bars, oldest -> newest,
+  // then this game's projection as a hatched bar on the right. With a line: bars are
+  // green when that game cleared it (red when not) and the line is dashed across; without
+  // one (a game page's stat log): bars are neutral and the dashed line is his average.
+  function statChart(games, o) {
+    const opt = o || {}, g = games.slice().reverse(), line = opt.line, hasLine = line != null && !isNaN(line);
+    const proj = opt.proj != null && !isNaN(opt.proj) ? Number(opt.proj) : null;
+    if (!g.length && proj == null) return "";
+    const ref = hasLine ? line : g.length ? g.reduce((a, x) => a + x.v, 0) / g.length : null;
+    const W = 340, H = 190, top = 20, base = 134, left = 44, pad = 12, n = g.length + (proj != null ? 1 : 0);
+    const mx = Math.max((ref || 0) * 1.4, proj || 0, ...g.map((x) => x.v), 1);
+    const gap = proj != null && g.length ? 8 : 0, bw = (W - left - pad - gap) / n, y = (v) => base - (Math.max(0, v) / mx) * (base - top);
+    const refY = ref != null ? y(ref) : null;
+    const lbl = (v, cx, h) => { const near = refY != null && Math.abs(y(v) - 5 - refY) < 11 && h > 22; return `<text x="${cx}" y="${near ? y(v) + 15 : y(v) - 5}" text-anchor="middle" class="lbl2"${near ? ' style="fill:#fff"' : ""}>`; };
     const bars = g.map((x, i) => {
-      const hit = side === "over" ? x.v > line : x.v < line, cx = left + i * bw + bw / 2;
+      const hit = hasLine ? (opt.side === "over" ? x.v > line : x.v < line) : null, cx = left + i * bw + bw / 2;
       const bx = left + i * bw + bw * 0.15, h = Math.max(1, base - y(x.v));
-      return `<rect x="${bx}" y="${y(x.v)}" width="${bw * 0.7}" height="${h}" rx="4" fill="${hit ? "var(--accent)" : "var(--red)"}" opacity="${hit ? 0.95 : 0.7}"><animate attributeName="height" from="0" to="${h}" dur=".5s"/><animate attributeName="y" from="${base}" to="${y(x.v)}" dur=".5s"/></rect>
-        <text x="${cx}" y="${Math.abs(y(x.v) - 5 - y(line)) < 11 && h > 22 ? y(x.v) + 15 : y(x.v) - 5}" text-anchor="middle" class="lbl2"${Math.abs(y(x.v) - 5 - y(line)) < 11 && h > 22 ? ' style="fill:#fff"' : ""}>${x.v}${x.tgt != null ? `<tspan style="font-size:9.5px;font-weight:500"> /${x.tgt}</tspan>` : ""}</text>
-        <text x="${cx}" y="${base + 16}" text-anchor="middle" class="lbl2" style="font-size:10.5px">${esc(x.oppShort ? (x.ha === "@" ? "@" : "") + x.oppShort : "")}</text>
-        <text x="${cx}" y="${base + 30}" text-anchor="middle" style="font-size:10px">${esc(x.date)}</text>`;
+      const fill = hit == null ? "var(--blue)" : hit ? "var(--accent)" : "var(--red)", op = hit === false ? 0.7 : 0.9;
+      return `<g><title>${esc(x.title || `${x.v}`)}</title><rect x="${bx}" y="${y(x.v)}" width="${bw * 0.7}" height="${h}" rx="4" fill="${fill}" opacity="${op}"><animate attributeName="height" from="0" to="${h}" dur=".5s"/><animate attributeName="y" from="${base}" to="${y(x.v)}" dur=".5s"/></rect>
+        ${lbl(x.v, cx, h)}${x.v}${x.tgt != null ? `<tspan style="font-size:9.5px;font-weight:500"> /${x.tgt}</tspan>` : ""}</text>
+        <text x="${cx}" y="${base + 16}" text-anchor="middle" class="lbl2" style="font-size:10.5px">${esc(x.top || "")}</text>
+        <text x="${cx}" y="${base + 30}" text-anchor="middle" style="font-size:10px">${esc(x.sub || "")}</text></g>`;
     }).join("");
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Last ${n} games against the line ${line}">
-      ${bars}<line x1="${left - 4}" x2="${W - pad + 4}" y1="${y(line)}" y2="${y(line)}" stroke="var(--ink)" stroke-dasharray="5 4" stroke-width="1.5"/>
-      <text x="0" y="${y(line) + 4}" class="lbl2">${line}</text>
-      <text x="${left}" y="${H - 2}" style="font-size:10px">oldest</text><text x="${W - pad}" y="${H - 2}" text-anchor="end" style="font-size:10px">latest</text></svg>`;
+    let pbar = "";
+    if (proj != null) {
+      const i = g.length, cx = left + gap + i * bw + bw / 2, bx = left + gap + i * bw + bw * 0.15, h = Math.max(1, base - y(proj));
+      pbar = `${g.length ? `<line x1="${left + gap / 2 + i * bw}" x2="${left + gap / 2 + i * bw}" y1="${top - 6}" y2="${base + 34}" stroke="var(--line-2)" stroke-dasharray="3 3"/>` : ""}
+        <g><title>Projected this game: ${fmt1(proj)}</title><rect x="${bx}" y="${y(proj)}" width="${bw * 0.7}" height="${h}" rx="4" fill="url(#projHatch)" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        ${lbl(proj, cx, h)}${fmt1(proj)}</text>
+        <text x="${cx}" y="${base + 16}" text-anchor="middle" class="lbl2" style="font-size:10.5px;fill:var(--accent-2)">PROJ</text>
+        <text x="${cx}" y="${base + 30}" text-anchor="middle" style="font-size:10px">this game</text></g>`;
+    }
+    const refLine = ref != null ? `<line x1="${left - 4}" x2="${W - pad + 4}" y1="${refY}" y2="${refY}" stroke="var(--ink)" stroke-dasharray="5 4" stroke-width="1.5" opacity="${hasLine ? 1 : 0.6}"/>
+      <text x="0" y="${refY + 4}" class="lbl2">${hasLine ? line : "avg"}</text>${hasLine ? "" : `<text x="0" y="${refY + 16}" style="font-size:10px">${fmt1(ref)}</text>`}` : "";
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.label || `Last ${g.length} games`)}">
+      <defs><pattern id="projHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--accent-soft)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--accent-2)" stroke-width="2" opacity=".55"/></pattern></defs>
+      ${bars}${pbar}${refLine}
+      ${g.length > 1 ? `<text x="${left}" y="${H - 2}" style="font-size:10px">oldest</text><text x="${left + (g.length) * bw}" y="${H - 2}" text-anchor="end" style="font-size:10px">latest</text>` : ""}</svg>`;
+  }
+  function gameLogChart(games, line, side, proj) {
+    return statChart(games.map((x) => ({ v: x.v, tgt: x.tgt, top: x.oppShort ? (x.ha === "@" ? "@" : "") + x.oppShort : "", sub: x.date,
+      title: `${x.long || x.date} ${x.ha} ${x.opp}: ${x.v}` })), { line, side, proj, label: `Last ${games.length} games against the line ${line}` });
   }
   function gameLogList(games, line, side, league) {
     if (!games.length || !games.some((x) => x.opp)) return "";
@@ -610,7 +635,7 @@
         <div class="pfoot">${r.dfs ? esc(bookName(r.book)) : `${odds(r.price)} at ${esc(bookName(r.book))}`}${r.edge != null ? ` · edge ${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)} pts` : ""}${r.p_market != null && !r.dfs ? ` · <span style="color:${r.off_market ? "var(--accent-2)" : "inherit"}">market ${pct(r.p_market)} (${esc(r.market_books || "")})${r.off_market ? " · off-market" : ""}</span>` : ""}${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? ` · <b style="color:var(--ink)">stake $${stakeFor(r.p_model, r.price)}</b>` : ""} <button class="howto inline" data-guide>what's this?</button></div></div>
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
       ${lineStrip(r)}
-      <div class="panel form"><h3><span>Last ${vals.length} games</span><span class="hr">${isTD(r) ? `TD in <b>${vals.filter((v) => v > 0).length}</b> of ${vals.length}` : `<b>${vals.filter((v) => (over ? v > r.line : v < r.line)).length}</b> of ${vals.length} ${over ? "over" : "under"}`}${tgLine}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${glog.some((x) => x.opp) ? `<details class="gbg"><summary>Game by game <span class="chev">›</span></summary>${gameLogList(glog, Number(r.line), r.side, lg)}</details>` : ""}</div>
+      <div class="panel form"><h3><span>Last ${vals.length} games</span><span class="hr">${isTD(r) ? `TD in <b>${vals.filter((v) => v > 0).length}</b> of ${vals.length}` : `<b>${vals.filter((v) => (over ? v > r.line : v < r.line)).length}</b> of ${vals.length} ${over ? "over" : "under"}`}${tgLine}</span></h3>${gameLogChart(glog, Number(r.line), r.side, isTD(r) ? null : (r.proj_median ?? r.proj_mean ?? r.form_mean)) || '<div class="empty" style="padding:14px">No game log</div>'}${glog.some((x) => x.opp) ? `<details class="gbg"><summary>Game by game <span class="chev">›</span></summary>${gameLogList(glog, Number(r.line), r.side, lg)}</details>` : ""}</div>
       ${glancePanel(r)}
       ${newsPanel(r)}
       ${ladderPanel(r)}
@@ -702,6 +727,7 @@
       <dl>
         <dt>54%</dt><dd><b>Our chance this side wins.</b> The model's read, pulled most of the way toward what the betting market thinks (the market is usually close to right, so we only move away from it as far as our track record earns).</dd>
         <dt>needs 51%</dt><dd><b>How often it has to win for you to make money</b> at these odds. At −110 that's 52.4%; at −150, 60%; at +120, 45%. A pick is only worth it when the chance beats this number.</dd>
+        <dt>books 52%</dt><dd><b>What the other big sportsbooks think</b> (FanDuel, DraftKings, ESPN Bet), with their margin taken out. When Hard Rock's price needs less than this, Hard Rock is paying more than the market says it should.</dd>
         <dt>Proj 12.4</dt><dd><b>What we expect him to do</b> (carries, yards, catches…) in a typical game, next to the line he has to beat.</dd>
         <dt>Edge +2.9</dt><dd><b>Chance minus what it needs,</b> in percentage points: 54% − 51% ≈ +3. It is <i>not</i> how far the projection is from the line. Bigger is better; +2 to +5 is a normal real edge, anything above +10 usually means we're missing news.</dd>
         <dt>¢ per $1</dt><dd>What the edge is worth over many bets: +6¢ means about $6 back per $100 staked, on average. Any single bet still wins or loses.</dd>
@@ -758,6 +784,49 @@
     nfl: { QB: [["pass_att", "Att"], ["pass_cmp", "Cmp"], ["pass_yds", "Yds"], ["pass_td", "TD"], ["int", "INT"], ["rush_yds", "RuYd"]], RB: [["rush_att", "Car"], ["rush_yds", "RuYd"], ["targets", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"]], WR: [["targets", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"]], TE: [["targets", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"]] },
     cfb: { QB: [["pass_yds", "Yds"], ["pass_td", "TD"], ["int", "INT"], ["rush_att", "Car"], ["rush_yds", "RuYd"]], RB: [["rush_att", "Car"], ["rush_yds", "RuYd"], ["rush_td", "TD"], ["rec", "Rec"], ["rec_yds", "ReYd"]], WR: [["rec", "Rec"], ["rec_yds", "ReYd"], ["rec_td", "TD"]], TE: [["rec", "Rec"], ["rec_yds", "ReYd"], ["rec_td", "TD"]] },
   };
+  // ADR-0077: a player's recent stat lines from a game page, props or not
+  const LOGCOLS = {
+    QB: [["cmp", "Cmp"], ["att", "Att"], ["pass_yds", "Yds"], ["pass_td", "TD"], ["int", "INT"], ["rush_att", "Car"], ["rush_yds", "RuYd"]],
+    RB: [["rush_att", "Car"], ["rush_yds", "RuYd"], ["rush_td", "TD"], ["tgt", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"]],
+    WR: [["tgt", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"], ["rec_td", "TD"]],
+    TE: [["tgt", "Tgt"], ["rec", "Rec"], ["rec_yds", "ReYd"], ["rec_td", "TD"]],
+  };
+  function openStatLog(x, g) {
+    const { p, team: tid, league } = x, t = team(league, tid), log = p.log || [];
+    const cols = (LOGCOLS[p.pos] || LOGCOLS.WR).filter(([k]) => log.some((r) => r[k] != null));
+    const avg = (k) => { const v = log.map((r) => r[k]).filter((n) => n != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const projCols = COLS[league][p.pos] || [];
+    // his posted props (the over / TD-yes side, one per market and book)
+    const props = state.rows.filter((r) => normName(r.player_ref) === normName(p.player) && r.side === "over")
+      .filter((r, i, a) => a.findIndex((y) => y.market === r.market && y.book === r.book) === i).slice(0, 8);
+    const season = log.length ? log[0].season : null;
+    // ADR-0079: one chart per stat, chips to switch, his projection for this game at the end
+    const PROJKEY = { cmp: "pass_cmp", att: "pass_att", tgt: "targets" };
+    const projOfKey = (k) => { const v = p.proj ? (p.proj[PROJKEY[k] || k] ?? p.proj[k]) : null; return v == null ? null : v; };
+    const MAIN = { QB: "pass_yds", RB: "rush_yds", WR: "rec_yds", TE: "rec_yds" };
+    let cur = cols.some(([k]) => k === MAIN[p.pos]) ? MAIN[p.pos] : (cols[0] || [])[0];
+    const chartFor = (k) => statChart(log.filter((r) => r[k] != null).map((r) => ({ v: r[k], top: r.opp ? String(abbr(league, r.opp) || r.opp).slice(0, 5) : "", sub: `Wk ${r.wk}`, title: `Week ${r.wk}${r.opp ? " vs " + r.opp : ""}: ${r[k]}` })),
+      { proj: projOfKey(k), label: `${p.player}: last ${log.length} games` });
+    const chips = () => cols.map(([k, lab]) => `<button class="mchip" data-st="${k}" aria-pressed="${k === cur}"><span>${esc(lab)}</span><b>${avg(k) == null ? "–" : fmt1(avg(k))}</b><small>avg${projOfKey(k) != null ? " · proj " + fmt1(projOfKey(k)) : ""}</small></button>`).join("");
+    const sh = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button></div>
+      <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")};min-height:150px">
+        <div class="wm2">${esc(((t && t.abbr) || tid || "").slice(0, 4))}</div>${faceCut(league, p.player, tid)}
+        <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc(p.player)}</div>
+          <div class="sub2">${esc(p.pos)} · ${esc((t && t.name) || tid)}${p.status && p.status !== "IN" ? ` · <span class="st ${p.status === "OUT" ? "out" : "q"}">${esc(p.status)}</span>` : ""}</div></div></div>
+      ${projCols.length ? `<div class="panel"><h3><span>This game, projected</span></h3><div class="ptiles">${projCols.filter(([k]) => p.proj[k] != null).map(([k, lab]) => `<div class="pt"><b>${fmt1(p.proj[k])}</b><span>${esc(lab)}</span></div>`).join("")}</div></div>` : ""}
+      ${log.length && cols.length ? `<div class="panel form"><h3><span>Game by game</span><span>hatched = projected this game</span></h3><div class="mstrip" id="stChips">${chips()}</div><div id="stChart">${chartFor(cur)}</div></div>` : ""}
+      <div class="panel"><h3><span>Last ${log.length} games</span><span>${season ? esc(String(season)) + " season" : ""}</span></h3>
+        ${log.length ? `<table class="pl"><thead><tr><th>Game</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>
+          ${log.map((r) => `<tr><td>Wk ${r.wk} ${r.opp ? "vs " + esc(abbr(league, r.opp) || r.opp) : ""}</td>${cols.map(([k]) => `<td>${r[k] == null ? "–" : r[k]}</td>`).join("")}</tr>`).join("")}
+          <tr class="avg"><td>Average</td>${cols.map(([k]) => `<td>${avg(k) == null ? "–" : fmt1(avg(k))}</td>`).join("")}</tr></tbody></table>` : `<div class="empty" style="padding:14px">No games on record yet</div>`}</div>
+      ${props.length ? `<div class="panel"><h3><span>His props</span></h3>${props.map((r, i) => `<div class="partner" data-lp="${i}" style="cursor:pointer"><div class="who"><b>${esc(LABEL[r.market] || r.market)} ${sideLine(r)}</b><small>${esc(bookName(r.book))} · ${pct(r.p_model)} to hit</small></div>${verdictChip(r)}</div>`).join("")}</div>`
+        : `<div class="note-card">No lines posted for him yet. Props show here once a book lists them.</div>`}`, true);
+    sh.addEventListener("click", (e) => {
+      const lp = e.target.closest("[data-lp]"); if (lp) { openPlayer(props[Number(lp.dataset.lp)]); return; }
+      const st = e.target.closest("[data-st]");
+      if (st) { cur = st.dataset.st; buzz(); $("#stChart", sh).innerHTML = chartFor(cur); $$("#stChips [data-st]", sh).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.st === cur))); }
+    });
+  }
   function teamTable(id, blk, league) {
     if (!blk) return "";
     const sub = league === "nfl" ? `implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)}` : `model ${fmt1(blk.model_points)} pts · recent ${fmt1(blk.recent_points)}`;
@@ -769,7 +838,7 @@
       const ps = (blk.players || []).filter((p) => p.pos === g); if (!ps.length) continue;
       const cols = COLS[league][g];
       html += `<table class="pl"><thead><tr><th>${g}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
-      for (const p of ps) { const f = face(league, p.player, id); html += `<tr><td>${faceImg(f, "mini")}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`; }
+      for (const p of ps) { const f = face(league, p.player, id); state.gpl.push({ p, team: id, league }); html += `<tr class="plrow" data-pl="${state.gpl.length - 1}"><td>${faceImg(f, "mini")}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}${p.log && p.log.length ? ' <span class="chev2">›</span>' : ""}</td>${cols.map((c) => `<td>${fmt1(p.proj[c[0]])}</td>`).join("")}</tr>`; }
       html += `</tbody></table>`;
     }
     return html;
@@ -790,8 +859,8 @@
     if (!leg) return `<div class="cell"><div class="sub">no line</div></div>`;
     const pos = leg.edge != null && leg.edge > 0; legIndex.push(leg);
     const m = leg.mkt, off = m && m.off_market; // ADR-0051: Hard Rock vs the other books
-    const mk = m ? `<div class="sub" title="Fair chance from FanDuel/DraftKings/ESPN Bet at this number; EV per $1 at Hard Rock's price">market <b style="color:${off ? "var(--accent-2)" : "var(--ink)"}">${pct(m.p)}</b> · EV ${m.ev >= 0 ? "+" : ""}${(m.ev * 100).toFixed(1)}%</div>` : "";
-    return `<div class="cell ${(pos && flagged) || off ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">model <b style="color:var(--ink)">${pct(leg.p)}</b> / ${pct(leg.be)}</div>${mk}${off ? `<span class="tag good" style="margin:2px 0">Off-market</span>` : ""}${leg.early ? `<span class="tag good" style="margin:2px 0" title="Model ${Math.abs(leg.early.gap)} pts off this line, early in the week: lines have moved toward the model (provisional)">Early-line pick</span>` : ""}<button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
+    const mk = m ? `<div class="sub" title="Fair chance from FanDuel/DraftKings/ESPN Bet at this number">books <b style="color:${off ? "var(--accent-2)" : "var(--ink)"}">${pct(m.p)}</b>${m.ev > 0 ? ` · <b style="color:var(--accent-2)">+${(m.ev * 100).toFixed(1)}¢</b> per $1` : ""}</div>` : "";
+    return `<div class="cell ${(pos && flagged) || off ? "pos" : ""}"><div class="top2"><span>${esc(leg.short)}</span><span class="pr">${odds(leg.price)}</span></div><div class="sub">us <b style="color:var(--ink)">${pct(leg.p)}</b> · needs ${pct(leg.be)}</div>${mk}${off ? `<span class="tag good" style="margin:2px 0">Off-market</span>` : ""}${leg.early ? `<span class="tag good" style="margin:2px 0" title="Model ${Math.abs(leg.early.gap)} pts off this line, early in the week: lines have moved toward the model (provisional)">Early-line pick</span>` : ""}<button data-gleg="${legIndex.length - 1}">+ Slip</button></div>`;
   }
   function linesGrid(g, league) {
     const flags = (state.games.meta?.game_model?.[league]?.flags) || {}, by = Object.fromEntries(gameLegs(g, league).map((l) => [l.bet, l]));
@@ -893,9 +962,22 @@
     legIndex = [];
     gamesShown = games.slice().sort((a, b) => String(a.kickoff_utc || a.kickoff).localeCompare(String(b.kickoff_utc || b.kickoff)));
     $("#gmeta").textContent = all.length ? `${gamesShown.length} of ${all.length}` : "";
+    // ADR-0078: the best game bets first - Hard Rock sides the other books say it underprices,
+    // and early college lines far from our number - so nobody scrolls every card for them
+    state.gbest = gamesShown.flatMap((g, gi) => gameLegs(g, league).filter((l) => (l.mkt && l.mkt.off_market) || l.early).map((l) => ({ ...l, gi, g })))
+      .filter((l) => !when(l.kick).locked).sort((a, b) => ((b.mkt && b.mkt.ev) || 0) - ((a.mkt && a.mkt.ev) || 0)).slice(0, 6);
+    $("#gBest").innerHTML = `<div class="tsec"><h3><span>Best game bets</span><span style="text-transform:none;letter-spacing:0;font-weight:600">${state.gbest.length ? "tap to see the game" : ""}</span></h3>${state.gbest.length
+      ? state.gbest.map((l, i) => `<div class="trow gb" data-gb="${i}"><span class="mk2 p">${l.early ? "⏱" : "⚖"}</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>${l.mkt ? `books say ${pct(l.mkt.p)} · Hard Rock's price needs ${pct(l.be)}` : `early line: we're ${Math.abs(l.early.gap)} pts off Hard Rock's number`} · ${esc(when(l.kick).txt || "")}</small></div><div class="pv" style="color:var(--accent-2)">${l.mkt && l.mkt.ev > 0 ? `+${(l.mkt.ev * 100).toFixed(1)}¢<small class="pvl">per $1</small>` : "<small class=\"pvl\">early</small>"}</div></div>`).join("")
+      : `<div class="tempty">No game line beats the other books right now. When Hard Rock prices a side better than FanDuel, DraftKings and ESPN Bet think it's worth, it shows here first.</div>`}
+      <div class="foot" style="margin:6px 0 0"><b>How to read a game:</b> <b>us</b> = our game model's chance (information only) · <b>books</b> = the other sportsbooks' chance, margin removed · <b>needs</b> = how often it must win for Hard Rock's price to pay · green = Hard Rock pays more than the books think it should.</div></div>`;
     $("#games").innerHTML = gamesShown.length ? gamesShown.map((g, i) => gameCard(g, league, i)).join("")
       : `<div class="empty"><b>${all.length ? "No games that day" : "No games yet"}</b>${all.length ? "Try All games." : "Games publish with the next board."}</div>`;
   }
+  $("#gBest").addEventListener("click", (e) => {
+    const r = e.target.closest("[data-gb]"); if (!r) return;
+    const l = state.gbest[Number(r.dataset.gb)], card = l && $(`#games [data-g="${l.gi}"]`);
+    if (card) { card.scrollIntoView({ behavior: "smooth", block: "start" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1400); }
+  });
   $("#games").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-gleg]");
     if (b) { e.stopPropagation(); toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
@@ -941,6 +1023,7 @@
     const rows = gameRows(g, league).sort((x, y) => (y.fav ? 1 : 0) - (x.fav ? 1 : 0) || (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9));
     legIndex = [];
     const big = (id) => { const t = team(league, id); return t && t.logo ? `<img src="${esc(t.logo)}" alt="" onerror="this.outerHTML='<span class=&quot;fb&quot;>${esc(abbr(league, id))}</span>'">` : `<span class="fb" style="--tc:${esc((t && t.color) || "#334155")}">${esc(abbr(league, id))}</span>`; };
+    state.gpl = []; // players listed on this game page (ADR-0077)
     const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><span class="when ${w.cls}" style="font-size:13px">${esc(w.txt)}${g.week ? " · Week " + g.week : ""}</span></div>
       <div class="ghero" style="--ca:${esc((ta && ta.color) || "#334155")};--ch:${esc((th && th.color) || "#334155")}">
         <div class="vs"><div>${big(g.away)}<div class="tnm">${esc((ta && ta.name) || g.away)}</div><div class="sc">${m ? fmt1(m.away) : ""}</div></div>
@@ -953,12 +1036,13 @@
       ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · unvalidated</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
       ${tdPanel(rows, league)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
-      ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3>Player projections</h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
+      ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3><span>Player projections</span><span>tap a player for his recent games</span></h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
     const gp = $("#gprops", s);
     if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
     s.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-gleg]"); if (b) { toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
       const p = e.target.closest("[data-gp]"); if (p) openPlayer(rows[Number(p.dataset.gp)]);
+      const pl = e.target.closest("[data-pl]"); if (pl) { const x = state.gpl[Number(pl.dataset.pl)]; if (x) openStatLog(x, g); return; }
       const td = e.target.closest("[data-td]"); if (td) openPlayer(state.tdRows[Number(td.dataset.td)]);
       if (e.target.closest("[data-tdboard]")) openTdBoard();
     });
@@ -2000,12 +2084,15 @@
       <small>model ${pct(x.joint)} together (${pct(x.ind)} if unrelated) · worth it at <b>${odds(toAmerican(1 / x.joint))}</b> or better on Hard Rock</small></div>
       <button class="btn small" data-sgp="${i}">+ Slip</button></div>`;
   }
-  function trow(r, extra) {
-    const lg = leagueOf(r), w = when(r.commence_time), be = r.breakeven_p ?? 0.524;
+  // ADR-0078: one chance per row, always with a word next to it ("to hit" / "to score"),
+  // and what the price needs right under it; the projection sits in the line on the left
+  function trow(r, extra, opt) {
+    const lg = leagueOf(r), w = when(r.commence_time), be = r.breakeven_p ?? 0.524, o = opt || {};
+    const pr = projOf(r), p = o.p ?? r.p_model, good = o.good ?? p >= be;
     return `<div class="trow" data-key="${esc(rowKey(r))}">${avatar(r.player_ref, lg, r.form_team, "sm")}
       <div><b>${esc(r.player_ref)}</b> <span style="color:var(--ink-3);font-weight:600">${sideLine(r)} ${esc(r.market_label || LABEL[r.market] || "")}</span>
-        <small>${esc(bookName(r.book))}${r.dfs ? " · needs " + pct(be) : " " + odds(r.price)}${w.txt ? " · " + esc(w.txt) : ""}${r.fav ? " · ★" : ""}</small>${extra || ""}</div>
-      <div class="pv" style="color:${r.p_model >= be ? "var(--accent-2)" : "var(--ink-2)"}">${pct(r.p_model)}<small style="display:block;color:var(--ink-3)">${(() => { const p = projOf(r); return p ? `${esc(p.big)} ${esc(p.small)}` : `needs ${pct(be)}`; })()}</small></div></div>`;
+        <small>${esc(bookName(r.book))}${r.dfs ? "" : " " + odds(r.price)}${pr && !isTD(r) ? ` · we project ${esc(pr.big)}` : ""}${w.txt ? " · " + esc(w.txt) : ""}${r.fav ? " · ★" : ""}</small>${extra || ""}</div>
+      <div class="pv" style="color:${good ? "var(--accent-2)" : "var(--ink-2)"}">${pct(p)}<small class="pvl">${o.label || (isTD(r) ? "to score" : "to hit")}</small><small class="pvn">${o.sub || `needs ${pct(be)}`}</small></div></div>`;
   }
   function renderToday() {
     const el = $("#today"); if (!el) return;
@@ -2059,8 +2146,9 @@
       // ADR-0076: always there; empty says so instead of the section vanishing
       { id: "news", icon: "📰", title: "News & injuries", n: news.rows.length, head: news.head,
         rows: news.rows.length ? news.rows : [`<div class="tempty">No news for upcoming ${state.league === "cfb" ? "college" : "NFL"} games right now. The reader checks each NFL game ~2 days and ~1 hour before kickoff, and the top college games ~3 hours before; news stays here until its game is played.</div>`] },
-      { id: "td", icon: "🏈", title: "Touchdowns", rows: tdLikely.map((r) => trow(r, `<span class="chg ${r._d > 0.02 ? "good" : ""}">we give ${pct(r.p_matchup_raw)} · books ${pct(r.p_book)}${r._d > 0.02 ? ` · we're +${(r._d * 100).toFixed(0)} higher` : r._d < -0.02 ? ` · we're ${(r._d * 100).toFixed(0)} lower` : ""}</span>`)),
-        foot: `Most likely to score today by our read (red-zone and goal-line role, team's expected points, who's out), next to the books' chance with their margin out.`, more: `<button class="btn small" id="allTD" style="margin-top:6px">Open the touchdown board</button>` },
+      { id: "td", icon: "🏈", title: "Touchdowns", rows: tdLikely.map((r) => trow(r, `<span class="chg ${r._d > 0.02 ? "good" : ""}">books say ${pct(r.p_book)}${r._d > 0.02 ? ` · we're ${(r._d * 100).toFixed(0)} pts higher` : r._d < -0.02 ? ` · we're ${Math.abs(r._d * 100).toFixed(0)} pts lower` : " · about the same"}</span>${r.p_model >= (r.breakeven_p ?? 1) ? `<span class="chg good">✓ worth it at ${odds(r.price)}</span>` : ""}`,
+          { p: r.p_matchup_raw, label: "to score", sub: `price needs ${pct(r.breakeven_p)}`, good: r.p_model >= (r.breakeven_p ?? 1) })),
+        foot: `Big number: our read of his chance to score (red-zone and goal-line role, team's expected points, who's out). "Books say": the other sportsbooks' chance with their margin taken out. "Price needs": how often he must score for Hard Rock's odds to pay off. ✓ only when the price clears our number after it's checked against the books.`, more: `<button class="btn small" id="allTD" style="margin-top:6px">Open the touchdown board</button>` },
       { id: "hr", icon: "💵", title: "Best on Hard Rock", rows: hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">Hard Rock pays more than the market</span>` : ""}`)) },
       { id: "sgp", icon: "⛓", title: "Same-game ideas", rows: sgps.map(sgpRow), foot: `Two picks in one game that tend to hit together. Hard Rock sets its own price: add both to the Slip, type Hard Rock's odds, and it shows whether the price is worth it.` },
       { id: "lean", icon: "🎯", title: "Matchup leans", rows: spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)), foot: `A soft matchup for this side. A lean, not a bet on its own.`, more: `<button class="btn small" id="allMLean" style="margin-top:6px">See all</button>` },
