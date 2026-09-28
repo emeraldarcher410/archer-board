@@ -119,7 +119,7 @@
   function verdictChip(r) {
     if (r.fav) return `<span class="verdict fav">★ Favorite</span>`;
     const c = r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : r.verdict === "Split" ? "split" : r.verdict === "Out" ? "out" : "";
-    return r.verdict ? `<span class="verdict ${c}">${esc(r.verdict)}</span>` : "";
+    return r.verdict ? `<span class="verdict ${c}">${esc(r.verdict === "Split" ? "Mixed" : r.verdict)}</span>` : "";
   }
   function ctxLine(r) {
     const lg = leagueOf(r), w = when(r.commence_time);
@@ -134,10 +134,10 @@
     const R = 24, C = 2 * Math.PI * R, v = p == null ? 0 : Math.max(0, Math.min(1, p));
     const yes = p != null && p >= be, col = p == null ? "var(--line-2)" : yes ? "var(--accent-2)" : "var(--ink-3)";
     const ta = be * 2 * Math.PI, tx = 29 + Math.cos(ta) * R, ty = 29 + Math.sin(ta) * R, tx2 = 29 + Math.cos(ta) * (R - 7), ty2 = 29 + Math.sin(ta) * (R - 7);
-    return `<div class="ring" title="best estimate ${pct(p)} · needs ${pct(be)}"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${R}" fill="none" stroke="var(--track)" stroke-width="6"/>
+    return `<div class="ring" title="Our chance this side wins: ${pct(p)}. It needs ${pct(be)} to make money at this price."><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${R}" fill="none" stroke="var(--track)" stroke-width="6"/>
       <circle class="arc" cx="29" cy="29" r="${R}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - v)}"/>
       <line x1="${tx}" y1="${ty}" x2="${tx2}" y2="${ty2}" stroke="var(--ink)" stroke-width="2.4" transform="translate(${Math.cos(ta) * 3.5} ${Math.sin(ta) * 3.5})"/></svg>
-      <div class="rv"><div>${p == null ? "—" : Math.round(p * 100)}<small>need ${Math.round(be * 100)}</small></div></div></div>`;
+      <div class="rv"><div>${p == null ? "—" : Math.round(p * 100) + '<span class="pc">%</span>'}<small>need ${Math.round(be * 100)}%</small></div></div></div>`;
   }
   function dots(r, be) {
     const d = (p, cls) => `<i class="${p == null ? "n" : p >= be ? cls : ""}"></i>`;
@@ -157,6 +157,18 @@
     if (hrKeysRows !== state.rows) { hrKeysRows = state.rows; hrKeys = new Set(state.rows.filter((x) => !x.dfs).map((x) => `${x.event_id}|${x.market}|${normName(x.player_ref)}`)); }
     return hrKeys.has(`${r.event_id}|${r.market}|${normName(r.player_ref)}`) ? "" : `<span class="tag warn" title="Only on ${esc(bookName(r.book))}: Hard Rock doesn't list this player's ${esc(LABEL[r.market] || r.market)}">App only · not at Hard Rock</span>`;
   }
+  // What we expect him to do, next to the line: the number people actually read (the owner's
+  // friend: "+2.9" said nothing). Yardage uses the typical game, which is what meets the line.
+  const UNITS = { player_rush_attempts: "carries", player_rush_yds: "rush yds", player_receptions: "catches", player_reception_yds: "rec yds", player_pass_yds: "pass yds", player_pass_attempts: "attempts", player_pass_completions: "completions", player_pass_tds: "pass TDs", player_pass_interceptions: "INTs" };
+  function projOf(r) {
+    if (isTD(r)) return r.p_matchup_raw != null ? { big: pct(r.side === "over" ? r.p_matchup_raw : 1 - r.p_matchup_raw), small: r.market === "player_1st_td" ? "to score 1st" : "to score" } : null;
+    const v = r.proj_median ?? r.proj_mean ?? r.form_mean;
+    return v == null ? null : { big: Number(v).toFixed(1), small: UNITS[r.market] || "proj" };
+  }
+  function projChip(r) {
+    const p = projOf(r); if (!p) return "";
+    return `<span class="projc" title="What we expect: ${esc(p.big)} ${esc(p.small)}${isTD(r) ? "" : ` vs the ${r.line} line`}">${isTD(r) ? "" : "Proj "}<b>${esc(p.big)}</b> ${esc(p.small)}</span>`;
+  }
   function card(r, i) {
     const lg = leagueOf(r), be = r.breakeven_p ?? 0.524, t = team(lg, r.form_team), over = r.side === "over";
     const w = when(r.commence_time);
@@ -165,9 +177,9 @@
       movement(r),
       r.dfs && r.best_line === false ? '<span class="tag warn">better line elsewhere</span>' : "",
       r.dfs && r.best_line === true && r.other_lines ? '<span class="tag good">best line</span>' : "",
-      appOnlyTag(r), volTag(r), depthTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
+      appOnlyTag(r), volTag(r), newsTag(r), depthTag(r), isMLean(r) ? `<span class="tag good" title="Top-20% matchup for this side and the matchup projection agrees: a lean, not a bet on its own">Matchup lean</span>` : "", mktTag(r), chgTags(r), trustTag(r),
     ].join("");
-    const edge = r.edge == null ? "" : `<span class="edge ${r.edge > 0 ? "pos" : "neg"}">${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)}</span>`;
+    const edge = projChip(r);
     return `<div class="swipe" data-i="${i}"><div class="under"><span class="l">+ Slip</span><span class="r">Hide</span></div>
       <div class="card v3 ${w.locked ? "locked" : ""}" style="--tc:${esc((t && t.color) || "var(--line-2)")}">
         <div class="row1">${avatar(r.player_ref, lg, r.form_team)}
@@ -222,7 +234,9 @@
   // ADR-0057: a matchup lean = a top-20% matchup for this side AND the matchup projection
   // above the fair price by 3+ points - shown even when the shrunk probability doesn't clear.
   const mEdge = (r) => (r.p_matchup_raw != null && r.p_book != null ? r.p_matchup_raw - r.p_book : -1);
-  const isMLean = (r) => !r.volume && !r.market_gap && (r.matchup_score ?? 0) >= 0.8 && mEdge(r) >= 0.03;
+  // ADR-0049 big gap, ADR-0066 line moved / news against: held back from every "bet this" list
+  const hold = (r) => !!(r.market_gap || r.caution);
+  const isMLean = (r) => !r.volume && !hold(r) && (r.matchup_score ?? 0) >= 0.8 && mEdge(r) >= 0.03;
   function leagueRows() { return state.rows.filter((r) => leagueOf(r) === state.league); }
   function filtered() {
     const f = state.f, q = state.q.trim().toLowerCase();
@@ -247,7 +261,7 @@
     return rows.sort(by[f.sort] || by.edge);
   }
   function renderTops() {
-    const favs = leagueRows().filter((r) => r.fav && !r.volume && !r.market_gap && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)).slice(0, 8);
+    const favs = leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)).slice(0, 8);
     $("#tops").innerHTML = favs.length ? favs.map((r, k) => {
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
@@ -267,7 +281,7 @@
     const favs = live.filter((r) => r.fav).length, both = live.filter((r) => (r.agree_count ?? 0) >= 2).length;
     const lg = state.league, logo = (name) => { const id = teamId(lg, name), t = team(lg, id); return t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="ab">${esc(abbr(lg, id).slice(0, 4))}</span>`; };
     $("#slate").innerHTML = `<div class="slate"><div class="d">${esc(day)}</div>
-      <div class="st2"><span><b>${games.length}</b>games</span><span><b>${favs}</b>favorites</span><span><b>${both}</b>both clear</span><span><b>${live.length}</b>lines</span></div>
+      <div class="st2"><span><b>${games.length}</b>games</span><span><b>${favs}</b>favorites</span><span><b>${both}</b>worth a look</span><span><b>${live.length}</b>lines</span></div>
       <div class="strip" id="strip">${games.map((g) => `<button class="gpill" data-ev="${esc(g.event_id)}" aria-pressed="${state.event === g.event_id}">${logo(g.away_team)}<span>@</span>${logo(g.home_team)}<span class="t2">${esc(when(g.commence_time).txt)}</span></button>`).join("")}</div></div>`;
   }
   $("#slate").addEventListener("click", (e) => {
@@ -291,8 +305,8 @@
   // ADR-0046: one-tap views, and your own saved ones
   const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false };
   const PRESETS = [
-    { id: "hr", name: "Hard Rock NFL · both clear", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
-    { id: "pk", name: "College pick'em · both clear", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
+    { id: "hr", name: "Hard Rock NFL · worth a look", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
+    { id: "pk", name: "College pick'em · worth a look", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
     { id: "mlean", name: "Matchup leans", league: null, f: { ...F0, agree: 0, mlean: true, sort: "matchup" } },
     { id: "td", name: "Touchdowns", league: "nfl", f: { ...F0, agree: 0, td: true } },
     { id: "watch", name: "★ My players", league: null, f: { ...F0, agree: 0, watch: true } },
@@ -534,7 +548,7 @@
     };
     state.pmRows = [...byMk.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, list]) => pick(list));
     return `<div class="mstrip">${state.pmRows.map((x, i) => {
-      const lean = x.edge != null && x.edge > 0 && !x.market_gap && !x.volume, cur = x.market === r.market;
+      const lean = x.edge != null && x.edge > 0 && !hold(x) && !x.volume, cur = x.market === r.market;
       const what = isTD(x) ? odds(x.price) : x.line;
       return `<button class="mchip ${lean ? "lean" : ""}" data-mk="${i}" aria-pressed="${cur}"><span>${esc(LABEL[x.market] || x.market)}</span><b>${what}</b><small>${lean ? `${isTD(x) ? "Yes" : x.side === "over" ? "▲ O" : "▼ U"} +${(x.edge * 100).toFixed(1)}` : "no lean"}</small></button>`;
     }).join("")}</div>`;
@@ -555,16 +569,18 @@
         <div class="wm2">${esc(((t && t.abbr) || r.form_team || "").slice(0, 4))}</div>
         ${faceCut(lg, r.player_ref, r.form_team)}
         <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc(r.player_ref)}</div>
-          <div class="sub2">${ctxLine(r)}${r.status ? ` · <span class="st ${r.status === "OUT" ? "out" : "q"}">${esc(r.status)}</span>` : ""}</div>
+          <div class="sub2">${ctxLine(r)}${r.status && r.status !== "IN" ? ` · <span class="st ${r.status === "OUT" ? "out" : "q"}">${esc(r.status)}</span>` : ""}</div>
           <div class="subrow">${verdictChip(r)}${movement(r)}</div></div>
       </div>
       <div class="pickband"><div><div class="l1">${esc(r.market_label || LABEL[r.market] || r.market)} · ${esc(bookName(r.book))}</div><div class="l2">${isTD(r) ? (over ? "YES" : "NO") : `${over ? "OVER" : "UNDER"} ${r.line}`}</div>
-          <div style="font-size:12px;color:var(--ink-3)">best estimate ${pct(r.p_model)} · needs ${pct(be)}${r.dfs ? "" : " at " + odds(r.price)}</div>
+          <div style="font-size:12px;color:var(--ink-3)"><b style="color:var(--ink)">${pct(r.p_model)}</b> chance to win · needs <b style="color:var(--ink)">${pct(be)}</b>${r.dfs ? " per pick" : " at " + odds(r.price)}${r.edge != null ? ` · edge ${r.edge > 0 ? "+" : ""}${(r.edge * 100).toFixed(1)} pts` : ""} <button class="howto inline" data-guide>what's this?</button></div>
+          ${(() => { const p = projOf(r); return p && !isTD(r) ? `<div style="font-size:12px;color:var(--ink-3)">we expect <b style="color:var(--ink)">${esc(p.big)} ${esc(p.small)}</b> in a typical game vs the ${r.line} line</div>` : ""; })()}
           ${r.p_market != null && !r.dfs ? `<div style="font-size:12px;color:${r.off_market ? "var(--accent-2)" : "var(--ink-3)"}">market ${pct(r.p_market)} (${esc(r.market_books || "")})${r.off_market ? " · off-market" : ""}</div>` : ""}
           ${state.bank && !r.dfs && stakeFor(r.p_model, r.price) ? `<div style="font-size:12px;font-weight:700;margin-top:2px">Suggested stake $${stakeFor(r.p_model, r.price)}</div>` : ""}</div>
         ${ring(r.p_model, be)}</div>
       ${lineStrip(r)}
       ${glancePanel(r)}
+      ${newsPanel(r)}
       ${ranksPanel(r)}
       ${w.locked ? `<div class="note-card"><b>Game has started.</b> This line is locked; shown for reference.</div>` : ""}
       <div class="panel"><h3><span>Last ${vals.length} games</span><span style="text-transform:none;letter-spacing:0">${isTD(r) ? `TD in ${vals.filter((v) => v > 0).length} of ${vals.length}` : `${vals.filter((v) => (over ? v > r.line : v < r.line)).length} of ${vals.length} ${over ? "over" : "under"}`}${tgLine}</span></h3>${gameLogChart(glog, Number(r.line), r.side) || '<div class="empty" style="padding:14px">No game log</div>'}${gameLogList(glog, Number(r.line), r.side, lg)}</div>
@@ -576,6 +592,8 @@
     s.addEventListener("click", (e) => {
       if (e.target.closest("[data-add]")) { toggleLeg(propLeg(r)); e.target.closest("[data-add]").textContent = inSlip(r) ? "✓ On your slip" : "+ Add to slip"; renderProps(); }
       if (e.target.closest("[data-track]")) trackSingle(propLeg(r));
+      const ov = e.target.closest("[data-ovr]"); if (ov) { setOverride(ov); return; }
+      if (e.target.closest("[data-guide]")) { openGuide(); return; }
       const mk = e.target.closest("[data-mk]"); if (mk) { const x = state.pmRows[Number(mk.dataset.mk)]; if (x && x !== r) { buzz(); openPlayer(x); } return; }
       if (e.target.closest("[data-share]")) shareCard(r);
       if (e.target.closest("[data-target]")) openTarget(r);
@@ -584,6 +602,83 @@
         store.set("archer-watch", [...state.watch]); e.target.closest("[data-watch]").textContent = state.watch.has(k) ? "★" : "☆"; buzz(); renderProps();
       }
     });
+  }
+
+  // ADR-0066: who plays and what the news says, with sources
+  const SRC = { report: "injury report", roster: "roster", sleeper: "Sleeper", news: "news", stale: "last week's report", manual: "your override" };
+  const ctx = () => (state.meta && state.meta.context) || {};
+  const notesFor = (name) => (ctx().news || []).filter((n) => normName(n.player) === normName(name));
+  function noteRow(n, withTeam) {
+    const t = n.found_at ? ageText(new Date(n.found_at)) : "";
+    return `<div class="nrow"><span class="nk ${/out|ir|doubt|susp|benched|reduced|committee|snap/.test(n.kind) ? "bad" : /active|return|starter|lead|promoted/.test(n.kind) ? "good" : ""}">${esc(String(n.kind).replace("_", " "))}</span>
+      <div><b>${withTeam ? esc(n.player) + " · " + esc(n.team || "") : ""}</b>${withTeam ? "<br>" : ""}${esc(n.detail || "")}
+      <small>${n.source_url ? `<a href="${esc(n.source_url)}" target="_blank" rel="noopener">${esc(n.source_name || "source")}</a>` : esc(n.source_name || "")}${t ? ` · ${t === "just now" ? t : t + " ago"}` : ""} · ${Math.round((n.confidence || 0) * 100)}% sure</small></div>
+      ${noteAction(n)}</div>`;
+  }
+  function noteAction(n) {
+    const auto = (ctx().reader || {}).auto_confidence ?? 0.8, k = String(n.kind);
+    if (!state.api) return "";
+    if (/^(out|doubtful|ir|suspended)$/.test(k) && (n.confidence || 0) < auto) return `<button class="btn small" data-ovr="out" data-p="${esc(n.player)}" data-t="${esc(n.team || "")}">Mark out</button>`;
+    if (/^(active|returning)$/.test(k)) return `<button class="btn small" data-ovr="in" data-p="${esc(n.player)}" data-t="${esc(n.team || "")}">Mark playing</button>`;
+    return "";
+  }
+  async function setOverride(btn) {
+    try {
+      await apiPost("/api/override", { player: btn.dataset.p, team: btn.dataset.t, status: btn.dataset.ovr, note: "from a news note, on the phone" });
+      btn.textContent = "✓ Saved"; btn.disabled = true; toast("Saved. The board picks it up on its next run (≤15 min).");
+    } catch (_) { toast("Couldn't save it: connect your server first"); }
+  }
+  function newsPanel(r) {
+    const notes = notesFor(r.player_ref), bits = [];
+    if (r.status && r.status !== "IN") bits.push(`<div class="nrow"><span class="nk ${r.status === "OUT" ? "bad" : ""}">${esc(r.status)}</span><div>${esc(r.status_note || "")}<small>${esc((r.status_source || "").split("+").map((x) => SRC[x] || x).join(" + "))}</small></div></div>`);
+    if (r.caution_why) bits.push(`<div class="nrow"><span class="nk bad">check</span><div>${esc(r.caution_why)}<small>held back from ★ and Bet now: the news points against this side</small></div></div>`);
+    if (r.moved_against) bits.push(`<div class="nrow"><span class="nk">market</span><div>Line moved ${esc(r.open_line)} → ${esc(r.line)} since it opened, against this side<small>shown, not a hold: graded weekly</small></div></div>`);
+    if (r.injury_note) bits.push(`<div class="nrow"><span class="nk good">volume</span><div>${esc(r.injury_note)}<small>a lead teammate is out: part of his volume moves (ADR-0066)</small></div></div>`);
+    notes.forEach((n) => bits.push(noteRow(n, false)));
+    if (!bits.length) return "";
+    return `<div class="panel news"><h3><span>News &amp; availability</span></h3>${bits.join("")}</div>`;
+  }
+  function newsBody() {
+    const c = ctx(), st = c.status || {}, notes = (c.news || []).filter((n) => n.league === state.league || !n.league).slice(0, 10), al = (c.alerts || []).slice(0, 6);
+    const fresh = st.week ? (st.report_fresh ? `Week ${st.week} injury report is in.` : `Week ${st.week} injury report isn't out yet${st.report_week ? ` (last week's shown as cautions only)` : ""}.`) : "";
+    const src = st.sources ? Object.entries(st.sources).filter(([, n]) => n).map(([k, n]) => `${SRC[k] || k} ${n}`).join(" · ") : "";
+    const rd = c.reader || {};
+    const head = `<div class="foot" style="margin:0 0 8px">${esc(fresh)} ${src ? `Who's out comes from: ${esc(src)}.` : ""} ${rd.enabled ? `News reader: $${rd.month_usd} of $${rd.cap_usd} this month.` : "News reader: off."}</div>`;
+    const alerts = al.map((a) => `<div class="nrow"><span class="nk bad">market</span><div>${esc(a.why || "")}<small>${esc(a.away_team || "")} @ ${esc(a.home_team || "")}${a.at ? ` · ${ageText(new Date(a.at))} ago` : ""} · books pull props when news breaks</small></div></div>`).join("");
+    return { n: notes.length + al.length, html: head + alerts + notes.map((n) => noteRow(n, true)).join("") + (!notes.length && !al.length ? `<div class="tempty">No news flagged.</div>` : "") };
+  }
+
+  // ---- how to read the numbers (the owner's friend: "what do edge and the % mean?")
+  function openGuide() {
+    const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button></div>
+      <div class="guide"><h2>How to read Archer</h2>
+      <h3>On every pick</h3>
+      <dl>
+        <dt>54%</dt><dd><b>Our chance this side wins.</b> The model's read, pulled most of the way toward what the betting market thinks (the market is usually close to right, so we only move away from it as far as our track record earns).</dd>
+        <dt>needs 51%</dt><dd><b>How often it has to win for you to make money</b> at these odds. At −110 that's 52.4%; at −150, 60%; at +120, 45%. A pick is only worth it when the chance beats this number.</dd>
+        <dt>Proj 12.4</dt><dd><b>What we expect him to do</b> (carries, yards, catches…) in a typical game, next to the line he has to beat.</dd>
+        <dt>Edge +2.9</dt><dd><b>Chance minus what it needs,</b> in percentage points: 54% − 51% ≈ +3. It is <i>not</i> how far the projection is from the line. Bigger is better; +2 to +5 is a normal real edge, anything above +10 usually means we're missing news.</dd>
+        <dt>¢ per $1</dt><dd>What the edge is worth over many bets: +6¢ means about $6 back per $100 staked, on average. Any single bet still wins or loses.</dd>
+      </dl>
+      <h3>By bet type</h3>
+      <dl>
+        <dt>Hard Rock props</dt><dd>The % is the chance the over/under wins; "needs" comes from Hard Rock's odds.</dd>
+        <dt>PrizePicks / Underdog</dt><dd>There are no odds on each pick: the entry pays a multiplier. "Needs 57%" is how often each pick must hit for a typical entry to pay off (for example a 3-pick Power play).</dd>
+        <dt>Touchdowns</dt><dd>The % is his chance to score (anytime) or to score the game's first TD. Touchdowns are streaky: stake small.</dd>
+        <dt>Game lines</dt><dd>The % is the chance the side covers the spread or the total goes over/under, compared with what the other big sportsbooks think.</dd>
+        <dt>Same-game ideas</dt><dd>The % is the chance both picks hit together (they tend to move together), and the odds shown are the lowest worth taking.</dd>
+      </dl>
+      <h3>Labels</h3>
+      <dl>
+        <dt>★ Favorite</dt><dd>Both methods (his recent games and the matchup) clear what the price needs by 3+ points. Our strongest call.</dd>
+        <dt>Strong lean / Lean</dt><dd>Both methods agree the side is worth it; strong = by a wider margin.</dd>
+        <dt>Mixed / Pass</dt><dd>The methods disagree, or neither beats the price. Skip it.</dd>
+        <dt>Check news</dt><dd>Something the numbers can't see: news against the pick, a player coming back from an injury, or a gap to the line so big the sportsbook probably knows something. Held back from ★.</dd>
+        <dt>Small role</dt><dd>A backup or a tiny line: one play decides it.</dd>
+        <dt>Off-market</dt><dd>Hard Rock pays more than the other books think it should.</dd>
+      </dl>
+      <p class="foot">Unvalidated: every number here is graded weekly against results. Bet small until the track record says otherwise.</p></div>`, true);
+    return s;
   }
 
   // share card
@@ -1263,6 +1358,7 @@
   // The server is optional: without it the board works as before. Pairing trades the 6-digit
   // code from `fm api pair` for the passcode, kept on this phone only.
   state.api = store.get("archer-api", null);
+  state.todayOpen = store.get("archer-today-open", null);
   state.chat = store.get("archer-chat", []);
   const apiUrl = () => (state.api && state.api.url) || (state.meta && state.meta.api_url) || "";
   async function apiPost(path, body, timeout = 30000) {
@@ -1597,6 +1693,10 @@
     const m = /depth chart (\w+)/.exec(r.depth_note), down = /x0\./.test(r.depth_note);
     return `<span class="tag ${down ? "warn" : "good"}" title="${esc(r.depth_note)}">${down ? "▼" : "▲"} ${esc(m ? "Depth " + m[1] : "Role")}</span>`; // college: last game's role
   };
+  // ADR-0066: the line moved against this side, or a news note points against it
+  const newsTag = (r) => (r.caution ? `<span class="tag warn" title="${esc(r.caution_why || "")}">Check news · against this side</span>`
+    : r.news_note ? `<span class="tag" title="${esc(r.news_note)}">📰 ${esc(String(r.news_note).split(":")[0])}</span>` : "")
+    + (r.moved_against ? `<span class="tag" title="Moved ${r.open_line} → ${r.line} since it opened. Graded, not a hold: on week 3 these still hit 53%">Line moved against</span>` : "");
   const mktTag = (r) => (r.off_market && !r.dfs ? `<span class="tag mkt">Off-market +${(r.market_edge * 100).toFixed(1)}</span>` : "");
 
   // ---- bankroll: stake guide and a daily loss limit
@@ -1781,7 +1881,7 @@
   // book and track. Hard Rock for the NFL, the pick'em apps for college.
   function betNow(open) {
     const seen = new Set();
-    return open.filter((r) => r.p_model != null && (!r.volume || r.low_ok) && !r.market_gap && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
+    return open.filter((r) => r.p_model != null && (!r.volume || r.low_ok) && !hold(r) && r.p_model >= (r.breakeven_p ?? 0.524) && ((r.agree_count ?? 0) >= 2 || r.fav)
         && (leagueOf(r) === "nfl" ? !r.dfs : r.dfs) && !isTD(r))
       .sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1)))
       .filter((r) => { const k = r.player_ref + r.market + (r.book || ""); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8);
@@ -1815,7 +1915,7 @@
     return parts.length ? "Track record: " + parts.join(" · ") + "." : "Unvalidated until its closing-line value is graded.";
   }
   function sgpIdeas(open) {
-    const legs = open.filter((r) => leagueOf(r) === "nfl" && !r.dfs && !r.volume && !r.market_gap && r.p_model != null && r.p_book != null && r.p_model >= r.p_book && NFLSTAT[r.market]);
+    const legs = open.filter((r) => leagueOf(r) === "nfl" && !r.dfs && !r.volume && !hold(r) && r.p_model != null && r.p_book != null && r.p_model >= r.p_book && NFLSTAT[r.market]);
     const by = {}; legs.forEach((r) => { (by[r.event_id] = by[r.event_id] || []).push(r); });
     const out = [];
     Object.values(by).forEach((rs) => {
@@ -1842,7 +1942,7 @@
     return `<div class="trow" data-key="${esc(rowKey(r))}">${avatar(r.player_ref, lg, r.form_team, "sm")}
       <div><b>${esc(r.player_ref)}</b> <span style="color:var(--ink-3);font-weight:600">${sideLine(r)} ${esc(r.market_label || LABEL[r.market] || "")}</span>
         <small>${esc(bookName(r.book))}${r.dfs ? " · needs " + pct(be) : " " + odds(r.price)}${w.txt ? " · " + esc(w.txt) : ""}${r.fav ? " · ★" : ""}</small>${extra || ""}</div>
-      <div class="pv" style="color:${r.p_model >= be ? "var(--accent-2)" : "var(--ink-2)"}">${pct(r.p_model)}<small style="display:block;color:var(--ink-3)">${r.edge != null ? (r.edge > 0 ? "+" : "") + (r.edge * 100).toFixed(1) : ""}</small></div></div>`;
+      <div class="pv" style="color:${r.p_model >= be ? "var(--accent-2)" : "var(--ink-2)"}">${pct(r.p_model)}<small style="display:block;color:var(--ink-3)">${(() => { const p = projOf(r); return p ? `${esc(p.big)} ${esc(p.small)}` : `needs ${pct(be)}`; })()}</small></div></div>`;
   }
   function renderToday() {
     const el = $("#today"); if (!el) return;
@@ -1860,7 +1960,7 @@
       .filter((r) => { const k = r.player_ref + r.market; if (seenSpot.has(k)) return false; seenSpot.add(k); return true; }).slice(0, 5);
     const offm = open.filter((r) => r.off_market && !r.dfs).sort((a, b) => b.market_edge - a.market_edge).slice(0, 3);
     // ADR-0062: longshots stay in the game table - a +2000 edge is mostly noise
-    const tds = open.filter((r) => isTD(r) && r.side === "over" && !r.market_gap && ((r.p_matchup_raw != null && (r.edge ?? 0) > 0) || r.off_market) && r.price <= (r.market === "player_1st_td" ? 1000 : 600))
+    const tds = open.filter((r) => isTD(r) && r.side === "over" && !hold(r) && ((r.p_matchup_raw != null && (r.edge ?? 0) > 0) || r.off_market) && r.price <= (r.market === "player_1st_td" ? 1000 : 600))
       .sort((a, b) => (b.off_market ? 1 : 0) - (a.off_market ? 1 : 0) || (b.edge ?? 0) - (a.edge ?? 0)).slice(0, 6); // ADR-0064: market-backed first
     const changed = state.rows.filter((r) => state.changes.has(rowKey(r))).sort((a, b) => (b.fav - a.fav) || ((b.edge ?? -1) - (a.edge ?? -1))).slice(0, 12);
     const byKey = new Map(state.rows.map((r) => [rowKey(r), r]));
@@ -1880,22 +1980,36 @@
     state.early = early;
     const sec = (title, body, right) => `<div class="tsec"><h3><span>${title}</span>${right || ""}</h3>${body}</div>`;
     const since = state.seenAt ? ageText(new Date(state.seenAt)) : null;
+    // The day at a glance: money, what's live, the top picks. Everything else is a tile that
+    // opens one section at a time (the owner's friend: "too much going on").
+    const allNow = now, top = state.todayAll ? allNow : allNow.slice(0, 3);
+    const news = newsBody();
+    const tiles = [
+      { id: "news", icon: "📰", title: "News & injuries", n: news.n, body: news.html },
+      { id: "sgp", icon: "⛓", title: "Same-game ideas", n: sgps.length, body: sgps.map(sgpRow).join("") + `<div class="foot" style="margin:4px 0 0">Two picks in one game that tend to hit together. Hard Rock sets its own price for these: add both to the Slip, type Hard Rock's odds, and it shows whether the price is worth it.</div>` },
+      { id: "td", icon: "🏈", title: "Touchdowns", n: tds.length, body: tds.map((r) => trow(r, `<span class="chg good">${r.off_market ? `★ best price: other books make it ${pct(r.p_market)}, the price needs ${pct(r.breakeven_p)}` : `we give him ${pct(r.p_matchup_raw)} to score${r.market === "player_1st_td" ? " first" : ""}; the price needs ${pct(r.breakeven_p)}`}</span>`)).join("") + `<div class="foot" style="margin:4px 0 0">★ = Hard Rock pays more than every other book. Touchdowns are streaky: small stakes.</div><button class="btn small" id="allTD" style="margin-top:6px">Open the touchdown board</button>` },
+      { id: "lean", icon: "🎯", title: "Matchup leans", n: spots.length, body: spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)).join("") + `<div class="foot" style="margin:4px 0 0">A soft matchup for this side. A lean, not a bet on its own: the full chance hasn't cleared what the price needs.</div><button class="btn small" id="allMLean" style="margin-top:6px">See all</button>` },
+      { id: "hr", icon: "💵", title: "Best on Hard Rock", n: hr.length, body: hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">Hard Rock pays more than the market</span>` : ""}`)).join("") },
+      { id: "cfb", icon: "🎓", title: "College pick'em", n: cfb.length, body: cfb.map((r) => trow(r, chgTags(r))).join("") },
+      { id: "games", icon: "⚖", title: "Game lines", n: offg.length + early.length, body:
+        (offg.length ? `<div class="foot" style="margin:0 0 6px">Spreads and totals where Hard Rock's price is better than the other books' (FanDuel, DraftKings, ESPN Bet). ${flagTrack()}</div>` + offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>other books make it ${pct(l.mkt.p)} · about +${(l.mkt.ev * 100).toFixed(1)}¢ per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") : "")
+        + (early.length ? `<div class="foot" style="margin:8px 0 6px">College spreads where our number is 5+ points off Hard Rock's early line: bet before it moves. Provisional${earlyInfo.record ? `; ${esc(earlyInfo.record)} at the opener in past seasons` : ""}.</div>` + early.map((l, i) => `<div class="trow"><span class="mk2 p">⏱</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>we're ${Math.abs(l.early.gap)} pts off Hard Rock's line</small></div><button class="btn small" data-early="${i}">+ Slip</button></div>`).join("") : "") },
+      { id: "offm", icon: "⭐", title: "Hard Rock off-market", n: offm.length, body: offm.map((r) => trow(r, `<span class="chg good">other books make it ${pct(r.p_market)}; the price needs ${pct(r.breakeven_p)}</span>`)).join("") },
+      { id: "chg", icon: "🔄", title: "What changed", n: changed.length + moves.length, body:
+        (changed.length ? `<div class="foot" style="margin:0 0 6px">Since you last looked${since ? ` (${since} ago)` : ""}.${state.newCount ? ` ${state.newCount} new props posted.` : ""}</div>` + changed.map((r) => trow(r, chgTags(r))).join("") + `<button class="btn small" id="seenAll" style="margin:2px 0 8px">Mark seen</button>` : "")
+        + (moves.length ? `<div class="foot" style="margin:4px 0 6px">Biggest line moves</div>` + moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("") : "") },
+      { id: "alerts", icon: "🔔", title: "Your line alerts", n: state.targets.length, body: state.targets.map((t) => `<div class="trow"><span class="mk2 p">🎯</span><div><b>${esc(t.label || t.player_ref)}</b><small>${t.line != null ? `line ${t.side === "over" ? "≤" : "≥"} ${t.line}` : ""}${t.line != null && t.price != null ? " or " : ""}${t.price != null ? `price ≥ ${odds(t.price)}` : ""} · ${esc(bookName(t.book))}</small></div><button class="btn small ghost danger" data-untarget="${esc(t.id)}">✕</button></div>`).join("") },
+    ].filter((t) => t.n > 0);
+    const opened = tiles.find((t) => t.id === state.todayOpen);
     el.innerHTML = [
       overLimit() ? `<div class="warnbar">Today's loss limit is reached. Stepping away is the +EV move.</div>` : "",
       live.length ? sec("Live now", `<div class="trow live" data-go-bets><span style="display:grid;place-items:center"><i class="dot2" style="display:block;width:12px;height:12px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite"></i></span><div><b>${live.length} bet${live.length > 1 ? "s" : ""} in play</b><small>tap to sweat them</small></div><div class="pv">›</div></div>`) : "",
       state.bank && state.bank.roll ? sec("Your day", `<div class="trow" data-go-bets><span></span><div><b style="color:${m.pl >= 0 ? "var(--accent-2)" : "var(--red)"}">${m.pl >= 0 ? "+" : "−"}$${Math.abs(m.pl).toFixed(2)}</b><small>$${m.open.toFixed(0)} in play · ${m.n} bet${m.n === 1 ? "" : "s"} today${state.bank.limit ? ` · limit $${state.bank.limit}` : ""}</small></div><div class="pv">›</div></div>`) : "",
-      sec("Bet now", now.length ? now.map(betNowRow).join("") : `<div class="tempty">Nothing clears both views right now. A quiet board is the right answer, not a bug.</div>`, `<span class="sub" style="text-transform:none;letter-spacing:0">both views clear or ★</span>`),
-      sgps.length ? sec("Same-game parlay ideas · Hard Rock", sgps.map(sgpRow).join("") + `<div class="foot" style="margin:4px 0 0">Hard Rock sets its own odds for these. Add both to the Slip, type Hard Rock's quote, and it shows whether the price is worth it.</div>`) : "",
-      sec("Best on Hard Rock · NFL", hr.length ? hr.map((r) => trow(r, `${chgTags(r)}${r.off_market ? `<span class="chg good">off-market +${(r.market_edge * 100).toFixed(1)}</span>` : ""}`)).join("") : `<div class="tempty">No NFL Hard Rock props on the board right now.</div>`),
-      cfb.length ? sec("College pick'em", cfb.map((r) => trow(r, chgTags(r))).join("")) : "",
-      spots.length ? sec("Matchup leans", spots.map((r) => trow(r, `<span class="chg good">${esc(r.rank_head || "strong matchup")}</span>${chgTags(r)}`)).join("") + `<div class="foot" style="margin:4px 0 0">Top-20% matchups where the matchup projection agrees. Leans, not bets: the full probability hasn't cleared break-even.</div>`, `<button id="allMLean">See all</button>`) : "",
-      early.length ? sec("Early-line picks · college spreads", early.map((l, i) => `<div class="trow"><span class="mk2 p">⏱</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>model ${Math.abs(l.early.gap)} pts off Hard Rock's line · bet before it moves</small></div><button class="btn small" data-early="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Provisional. When the model was 5+ points off the opener, lines moved its way ${earlyInfo.record ? `and it went ${esc(earlyInfo.record)} (${pct(earlyInfo.hit_at_open)}) at the opener` : ""} on past seasons; nothing is left by the close. Tracked on closing-line value. ${flagTrack()}</div>`) : "",
-      offg.length ? sec("Game lines · Hard Rock vs the market", offg.map((l, i) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>market ${pct(l.mkt.p)}${l.mkt.push ? ` (+${pct(l.mkt.push)} push)` : ""} · EV <b style="color:var(--accent-2)">+${(l.mkt.ev * 100).toFixed(1)}%</b> per $1 · ${esc(l.league.toUpperCase())}</small></div><button class="btn small" data-offg="${i}">+ Slip</button></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Priced off FanDuel, DraftKings and ESPN Bet at Hard Rock's number (key numbers included). ${flagTrack()}</div>`) : "",
-      tds.length ? sec("Touchdown looks · NFL", tds.map((r) => trow(r, `<span class="chg good">${r.off_market ? `★ best price: market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}` : `model ${pct(r.p_matchup_raw)} to score${r.market === "player_1st_td" ? " first" : ""}, fair ${pct(r.p_book)} vs ${pct(r.breakeven_p)} priced`}</span>`)).join("") + `<div class="foot" style="margin:4px 0 0">★ = Hard Rock pays more than every other book and beats their fair price (the strongest kind). The rest: the model, pulled toward the margin-free market price, still beats Hard Rock's. Small stakes, graded weekly.</div>`, `<button id="allTD">See all</button>`) : "",
-      offm.length ? sec("Hard Rock off-market", offm.map((r) => trow(r, `<span class="chg good">market ${pct(r.p_market)} vs ${pct(r.breakeven_p)} needed · ${esc(r.market_books || "")}</span>`)).join("")) : "",
-      sec(`Since you last looked${since ? ` · ${since} ago` : ""}`, (changed.length ? changed.map((r) => trow(r, chgTags(r))).join("") : `<div class="tempty">Nothing moved on the board since your last look.</div>`) + (state.newCount ? `<div class="foot" style="margin:4px 0 0">${state.newCount} new props posted.</div>` : ""), changed.length ? `<button id="seenAll">Mark seen</button>` : ""),
-      moves.length ? sec(`Biggest moves${state.meta.movers[0] && parseStamp(state.meta.movers[0].since) ? " · since " + parseStamp(state.meta.movers[0].since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}`, moves.map(({ m: mv, r }) => trow(r, `<span class="chg ${mv.fav && !mv.was_fav ? "fav" : ""}">${mv.was_line !== mv.line ? `line ${mv.was_line} → ${mv.line}` : ""}${!mv.dfs && mv.was_price !== mv.price ? ` ${odds(mv.was_price)} → ${odds(mv.price)}` : ""}${mv.fav && !mv.was_fav ? " · new ★" : ""}</span>`)).join("")) : "",
-      state.targets.length ? sec("Your line alerts", state.targets.map((t) => `<div class="trow"><span class="mk2 p">🎯</span><div><b>${esc(t.label || t.player_ref)}</b><small>${t.line != null ? `line ${t.side === "over" ? "≤" : "≥"} ${t.line}` : ""}${t.line != null && t.price != null ? " or " : ""}${t.price != null ? `price ≥ ${odds(t.price)}` : ""} · ${esc(bookName(t.book))}</small></div><button class="btn small ghost danger" data-untarget="${esc(t.id)}">✕</button></div>`).join("")) : "",
+      sec("Top picks", (top.length ? top.map(betNowRow).join("") : `<div class="tempty">Nothing clears right now. A quiet board is the right answer, not a bug.</div>`)
+        + (allNow.length > 3 ? `<button class="btn small ghost" id="todayAll" style="width:100%;margin-top:2px">${state.todayAll ? "Show fewer" : `Show all ${allNow.length}`}</button>` : ""),
+        `<button class="howto" data-guide>How to read this ⓘ</button>`),
+      tiles.length ? `<div class="tiles">${tiles.map((t) => `<button class="tile ${opened && opened.id === t.id ? "on" : ""}" data-tile="${t.id}"><span class="ti">${t.icon}</span><span class="tt">${esc(t.title)}</span><span class="tn">${t.n}</span></button>`).join("")}</div>` : "",
+      opened ? `<div class="tsec topen"><h3><span>${opened.icon} ${esc(opened.title)}</span><button data-tile="${opened.id}">Close</button></h3>${opened.body}</div>` : "",
     ].join("");
     el.onclick = async (e) => {
       if (e.target.closest("[data-go-bets]")) { show("bets"); return; }
@@ -1905,6 +2019,10 @@
       const ea = e.target.closest("[data-early]"); if (ea) { const l = state.early[Number(ea.dataset.early)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       const og = e.target.closest("[data-offg]"); if (og) { const l = state.offg[Number(og.dataset.offg)]; if (l) { toggleLeg(l); toast("Added to the Slip"); } return; }
       if (sg) { const x = state.sgps[Number(sg.dataset.sgp)]; if (x) { [x.a, x.b].forEach((r) => { if (!inSlip(r)) toggleLeg(propLeg(r)); }); toast("Both legs in the Slip: type Hard Rock's odds there", { label: "Open Slip", fn: () => show("slip") }); } return; }
+      const ov = e.target.closest("[data-ovr]"); if (ov) { setOverride(ov); return; }
+      const tl = e.target.closest("[data-tile]"); if (tl) { state.todayOpen = state.todayOpen === tl.dataset.tile ? null : tl.dataset.tile; store.set("archer-today-open", state.todayOpen); buzz(); renderToday(); return; }
+      if (e.target.closest("#todayAll")) { state.todayAll = !state.todayAll; renderToday(); return; }
+      if (e.target.closest("[data-guide]")) { openGuide(); return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#allMLean")) { applyPreset(PRESETS.find((p) => p.id === "mlean")); show("props"); return; }
       if (e.target.closest("#allTD")) { openTdBoard(); return; }

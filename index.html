@@ -592,6 +592,26 @@
   .seg2 button { border: 0; background: transparent; color: var(--ink-3); font-weight: 700; font-size: 14px; border-radius: 10px; min-height: 36px; }
   .seg2 button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
   .tsec { margin: 0 0 16px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+  .tile { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; text-align: left; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 13px/1.2 Inter, sans-serif; }
+  .tile .ti { font-size: 16px; } .tile .tn { font: 700 13px var(--display); color: var(--ink-3); background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
+  .tile.on { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; } .tile.on .tn { color: var(--accent-2); }
+  .topen { padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+  .howto { border: 0; background: none; color: var(--accent-2); font: 700 12px Inter, sans-serif; letter-spacing: 0; text-transform: none; padding: 0; }
+  .howto.inline { font-size: 11px; margin-left: 4px; text-decoration: underline; }
+  .projc { font-size: 12px; color: var(--ink-3); padding: 2px 8px; border-radius: 7px; background: var(--surface-2); white-space: nowrap; }
+  .projc b { font: 700 15px var(--display); color: var(--ink); }
+  .ring .rv .pc { font-size: 10px; margin-left: 1px; }
+  .guide h2 { margin: 4px 0 8px; font: 700 24px var(--display); } .guide h3 { margin: 18px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+  .guide dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; font-size: 14px; line-height: 1.4; }
+  .guide dt { font: 700 15px var(--display); color: var(--accent-2); white-space: nowrap; } .guide dd { margin: 0; color: var(--ink-2); }
+  .nrow { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; font-size: 13px; }
+  .nrow small { display: block; color: var(--ink-3); font-size: 11px; margin-top: 2px; }
+  .nrow small a { color: var(--accent-2); }
+  .nk { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 6px; background: var(--line); color: var(--ink-2); white-space: nowrap; }
+  .nk.bad { background: color-mix(in srgb, var(--red) 18%, transparent); color: var(--red); }
+  .nk.good { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
+  .panel.news .nrow { background: transparent; }
   .tsec > h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
   .tsec > h3 button { border: 0; background: none; color: var(--accent-2); font-weight: 700; font-size: 12px; letter-spacing: 0; text-transform: none; }
   .trow { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 8px; }
@@ -703,7 +723,7 @@
 
   <section id="propsView" class="view hidden">
     <div id="slate"></div>
-    <div class="sec-h"><h2>Top plays</h2><span>pre-registered rule</span></div>
+    <div class="sec-h"><h2>Top plays</h2><span>★ our strictest picks</span></div>
     <div class="tops" id="tops"></div>
     <div class="page-h" style="margin-top:6px"><h1>Props</h1><span class="sub" id="count"></span></div>
     <div class="toolbar">
