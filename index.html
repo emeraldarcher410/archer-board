@@ -144,6 +144,10 @@
   /* top plays */
   .tops { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 2px 16px 10px; scrollbar-width: none; }
   .tops::-webkit-scrollbar { display: none; }
+  .tops-h { font: 800 italic 13px/1.2 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin: 4px 0 6px; }
+  .tops-h small { font: 500 12px Inter, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--ink-3); margin-left: 6px; }
+  .verdict.likely { background: var(--accent-soft); color: var(--accent-2); margin-left: 6px; }
+  .verdict.value { background: var(--blue-soft); color: var(--blue); margin-left: 6px; }
   .top { flex: 0 0 78%; max-width: 320px; scroll-snap-align: start; border-radius: 18px; padding: 14px; position: relative; overflow: hidden; cursor: pointer;
     background: linear-gradient(145deg, color-mix(in srgb, var(--tc, #1f2937) 55%, var(--surface)), var(--surface) 70%); border: 1px solid color-mix(in srgb, var(--tc, #334155) 40%, var(--line)); box-shadow: var(--shadow); }
   .top .rk { position: absolute; right: 12px; top: 8px; font-family: var(--display); font-size: 44px; font-weight: 800; opacity: .12; }
@@ -889,7 +893,7 @@
   <section id="propsView" class="view hidden">
     <div id="slate"></div>
     <div class="sec-h"><h2>Top plays</h2><span>★ our strictest picks</span></div>
-    <div class="tops" id="tops"></div>
+    <div id="tops"></div>
     <div class="page-h" style="margin-top:6px"><h1>Props</h1><span class="sub" id="count"></span></div>
     <div class="toolbar">
       <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>

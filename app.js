@@ -18,6 +18,7 @@
   const buzz = () => { try { navigator.vibrate && navigator.vibrate(12); } catch (_) { /* no haptics */ } };
   const normName = (n) => String(n || "").toLowerCase().replace(/\./g, " ").replace(/[^a-z ]/g, "").split(/\s+/).filter((t) => t && !["jr", "sr", "ii", "iii", "iv"].includes(t)).join(" ");
   const leagueOf = (r) => (String(r.sport || "").endsWith("ncaaf") ? "cfb" : "nfl");
+  const LIKELY = 0.5; // ADR-0085: likely vs value picks
   const parseStamp = (s) => { if (!s) return null; const m = String(s).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z$/); return m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : new Date(s); };
   const ageText = (d) => { if (!d || isNaN(d)) return null; const m = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} d`; };
   const STAT_OF = { player_pass_yds: "pass_yds", player_pass_tds: "pass_td", player_pass_completions: "pass_cmp", player_pass_attempts: "pass_att", player_pass_interceptions: "int", player_rush_yds: "rush_yds", player_rush_attempts: "rush_att", player_receptions: "rec", player_reception_yds: "rec_yds", player_anytime_td: "td", player_1st_td: "first_td" };
@@ -103,7 +104,7 @@
     const yes = p >= be;
     return `<div class="m"><span class="lb">${label}</span><div class="bar" aria-hidden="true"><i class="${kind === "pff" ? "pff" : yes ? "y" : ""}" style="width:${Math.min(100, p * 100)}%"></i><u style="left:${be * 100}%"></u></div><span class="v">${pct(p)}</span><span class="ok ${yes ? "y" : ""}">${yes ? "✓" : "·"}</span></div>`;
   }
-  const meters = (r, be) => `<div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}${meter("PFF", r.p_pff, be, "pff")}</div>`;
+  const meters = (r, be) => `<div class="meters">${meter("Fair", r.p_book, be)}${meter("Form", r.p_naive, be)}${meter("Matchup", r.p_matchup, be)}</div>`; // ADR-0086: PFF tested as adding nothing - notes only
   function movement(r) {
     if (r.open_line != null && r.line != null && Number(r.open_line) !== Number(r.line)) {
       const up = Number(r.line) > Number(r.open_line);
@@ -122,10 +123,20 @@
   }
   // ADR-0073: only when the line history says so, and only "bet now" on cards
   const timingChip = (r) => (r.timing === "now" ? `<span class="verdict now" title="${esc(r.timing_why || "")}">⚡ Bet now</span>` : "");
+  // ADR-0085: a pick that clears its price is "likely" (we give it 50%+) or "value" (under 50%,
+  // but the price pays more than it should: Hurts over 1.5 pass TDs at +130, 47% vs 43% needed)
+  const clearsPrice = (r) => r.p_model != null && r.p_model >= (r.breakeven_p ?? 0.524) && r.verdict !== "Out";
+  const pickKind = (r) => (!clearsPrice(r) ? null : r.p_model >= LIKELY ? "likely" : "value");
+  function kindChip(r) {
+    const k = pickKind(r); if (!k) return "";
+    return k === "likely"
+      ? `<span class="verdict likely" title="We think this hits more often than not: ${pct(r.p_model)}">Likely ${pct(r.p_model)}</span>`
+      : `<span class="verdict value" title="Wins less than half the time (${pct(r.p_model)}), but ${r.dfs ? "the app" : odds(r.price)} only needs ${pct(r.breakeven_p)}: a price pick">Value · ${r.dfs ? "price" : "pays " + odds(r.price)}</span>`;
+  }
   function verdictChip(r) {
-    if (r.fav) return `<span class="verdict fav">★ Top play</span>${timingChip(r)}`;
+    if (r.fav) return `<span class="verdict fav">★ Top play</span>${kindChip(r)}${timingChip(r)}`;
     const c = r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : r.verdict === "Split" ? "split" : r.verdict === "Out" ? "out" : "";
-    return r.verdict ? `<span class="verdict ${c}">${esc(r.verdict === "Split" ? "Mixed" : r.verdict)}</span>` : "";
+    return r.verdict ? `<span class="verdict ${c}">${esc(r.verdict === "Split" ? "Mixed" : r.verdict)}</span>${kindChip(r)}` : "";
   }
   function ctxLine(r) {
     const lg = leagueOf(r), w = when(r.commence_time);
@@ -147,7 +158,7 @@
   }
   function dots(r, be) {
     const d = (p, cls) => `<i class="${p == null ? "n" : p >= be ? cls : ""}"></i>`;
-    return `<div class="dots" title="form · matchup · PFF">${d(r.p_naive, "y")}${d(r.p_matchup, "y")}${d(r.p_pff, "p")}</div>`;
+    return `<div class="dots" title="form · matchup">${d(r.p_naive, "y")}${d(r.p_matchup, "y")}</div>`;
   }
   function spark(r) {
     const g = gameLog(r).slice(0, 5).reverse(); if (!g.length) return "";
@@ -263,6 +274,7 @@
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
     if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
+    if (f.pick === "likely" || f.pick === "value") rows = rows.filter((r) => pickKind(r) === f.pick); // ADR-0085
     if (state.event) rows = rows.filter((r) => r.event_id === state.event);
     if (f.watch) rows = rows.filter((r) => state.watch.has(normName(r.player_ref)));
     if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
@@ -276,14 +288,21 @@
     return rows.sort(by[f.sort] || by.edge);
   }
   function renderTops() {
-    const favs = leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)).slice(0, 8);
-    $("#tops").innerHTML = favs.length ? favs.map((r, k) => {
+    const all = leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0));
+    // ADR-0085: two rows - what we think hits more often than not, then price ("value") picks
+    const lik = all.filter((r) => (r.p_model ?? 0) >= LIKELY).slice(0, 6), val = all.filter((r) => (r.p_model ?? 0) < LIKELY).slice(0, 6);
+    const favs = [...lik, ...val];
+    const card1 = (r, k) => {
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
         <div class="who2">${avatar(r.player_ref, lg, r.form_team, "sm")}<div class="who"><div class="nm">${esc(r.player_ref)}</div><div class="ctx">${ctxLine(r)}</div></div></div>
         <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}<small class="probl">${isTD(r) ? "to score" : "to hit"}</small></span></div>
         <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}</div></div>`;
-    }).join("") : `<div class="top empty2">No top plays right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div>`;
+    };
+    const row = (title, sub, rows, off) => (rows.length ? `<div class="tops-h">${title} <small>${sub}</small></div><div class="tops">${rows.map((r, k) => card1(r, off + k)).join("")}</div>` : "");
+    $("#tops").innerHTML = favs.length
+      ? row("Likely to hit", "we give these 50%+", lik, 0) + row("Value at the price", "under 50%, but the price pays more than it needs", val, lik.length)
+      : `<div class="tops"><div class="top empty2">No top plays right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div></div>`;
     state.topRows = favs;
   }
   function renderSlate() {
@@ -318,7 +337,7 @@
     renderApplied(); renderPresets();
   }
   // ADR-0046: one-tap views, and your own saved ones
-  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false };
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false, pick: "all" };
   const PRESETS = [
     { id: "hr", name: "Hard Rock NFL · worth a look", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
     { id: "pk", name: "College pick'em · worth a look", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
@@ -356,6 +375,7 @@
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
     if (f.mlean) out.push(["mlean", "Matchup leans"]);
+    if (f.pick === "likely" || f.pick === "value") out.push(["pick", f.pick === "likely" ? "Likely picks" : "Value picks"]);
     if (f.td) out.push(["td", "Touchdowns"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : f.sort === "matchup" ? "Sort: best matchup" : "Sort: A–Z"]);
     if (state.event) { const r = state.rows.find((x) => x.event_id === state.event); if (r) out.push(["event", `${abbr(leagueOf(r), teamId(leagueOf(r), r.away_team))} @ ${abbr(leagueOf(r), teamId(leagueOf(r), r.home_team))}`]); }
@@ -380,6 +400,7 @@
     const s = openSheet(`<div class="sh-top"><h2>Filter &amp; sort</h2><button class="btn small" data-close>Done</button></div>
       ${grp("Signal", "agree", [[2, "Both clear"], [1, "Either clears"], [0, "Everything"]])}
       ${grp("Type", "kind", [["all", "Everything"], ["book", "Sportsbooks"], ["pickem", "Pick'em apps"]])}
+      ${grp("Pick type <small style=\"text-transform:none;letter-spacing:0;font-weight:500\">· of the ones that clear their price</small>", "pick", [["all", "Both"], ["likely", "Likely (we say 50%+)"], ["value", "Value (under 50%, good price)"]])}
       ${grp("App", "book", [["all", "All apps"]].concat(books.map((b) => [b, bookName(b), DOT[b]])))}
       ${grp("Other sportsbooks <small style=\"text-transform:none;letter-spacing:0;font-weight:500\">· shown only when picked</small>", "book", EXTRA.map((b) => [b, bookName(b), DOT[b]]))}
       ${grp("Market", "market", [["all", "All markets"]].concat(markets.map((m) => [m, LABEL[m] || m])))}
@@ -622,7 +643,7 @@
       + (r.ref_book && r.ref_line != null ? `<div class="r"><span>${esc(bookName(r.ref_book))}<small> · sportsbook reference</small></span><b>${r.ref_line}</b><small>ref</small></div>` : "")
       + bookLines(r);
     const watched = state.watch.has(normName(r.player_ref));
-    const marks = [{ v: r.form_mean, t: "form", c: "var(--ink-2)" }, { v: r.proj_mean, t: "matchup", c: "var(--accent-2)" }, { v: r.pff_mean, t: "PFF", c: "#A78BFA" }];
+    const marks = [{ v: r.form_mean, t: "form", c: "var(--ink-2)" }, { v: r.proj_mean, t: "matchup", c: "var(--accent-2)" }];
     const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><div class="r">
         <button class="btn small" data-target>🎯 Alert</button><button class="btn small" data-watch>${watched ? "★" : "☆"}</button><button class="btn small" data-share>Share</button></div></div>
       <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")}">
@@ -758,6 +779,7 @@
       <h3>Labels</h3>
       <dl>
         <dt>★ Top play</dt><dd>Both methods (his recent games and the matchup) clear what the price needs by 3+ points. Our strongest call. It has nothing to do with the betting favorite: a +130 side can be a top play when we think it wins more often than +130 needs (43%).</dd>
+        <dt>Likely · Value</dt><dd>Every pick that clears its price gets one. <b>Likely</b>: we give it 50%+ (it should hit more often than not). <b>Value</b>: we give it under 50%, but the price pays more than it needs, so it wins over many bets while losing more often than it wins. Stake value picks smaller. Both are graded separately every week.</dd>
         <dt>Strong lean / Lean</dt><dd>Both methods agree the side is worth it; strong = by a wider margin.</dd>
         <dt>Mixed / Pass</dt><dd>The methods disagree, or neither beats the price. Skip it.</dd>
         <dt>Check news</dt><dd>Something the numbers can't see: news against the pick, a player coming back from an injury, or a gap to the line so big the sportsbook probably knows something. Held back from ★.</dd>
@@ -970,7 +992,7 @@
         <div class="gtop">${countdown(g.kickoff_utc)}<span class="mk">${esc(market)}${g.week ? " · Wk " + g.week : ""}</span></div>
         <div style="margin-top:10px">${wpBar(g, league)}</div>${linesGrid(g, league)}
         ${matchupReadHtml(g, league, false)}
-        ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF matchups · unvalidated</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
+        ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF unit matchups · context</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
         <div class="glink"><span>Matchup page${nProps ? ` · ${nProps} props` : ""}</span><span>›</span></div></div></div>`;
   }
   let gamesShown = [];
@@ -1091,7 +1113,7 @@
       ${gameGlance(g, league)}
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
       ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
-      ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · unvalidated</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
+      ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · context, not in the projection</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
       ${tdPanel(rows, league)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
       ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3><span>Player projections</span><span>tap a player for his recent games</span></h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
@@ -1525,7 +1547,7 @@
     <p><b>Unvalidated.</b> These are heuristics, not the finished model. Each is pulled toward the market by how often it has been right, so a pick only clears when it disagrees with the market strongly. Bet small.</p>
     <p><b>★ Top play</b> = the rule fixed before any results: both projections clear by 3+ points and no injury tag. The Record tab grades it.</p>
     <p><b>The tick</b> on each bar is what the bet must hit to break even: Hard Rock's price, or your pick'em entry's per-pick rate.</p>
-    <p><b>Fair</b> is the market's own view with the vig removed (for pick'em, the sportsbooks' price at that line). <b>Form</b> is recent games. <b>Matchup</b> adds opponent, game script and scoring environment. <b>PFF</b> is the unit matchup, graded weekly before it earns a vote.</p>
+    <p><b>Fair</b> is the market's own view with the vig removed (for pick'em, the sportsbooks' price at that line). <b>Form</b> is recent games. <b>Matchup</b> adds opponent, game script and scoring environment. PFF unit matchups appear in the reasoning and on game pages as context only: tested on 2023–25, they added nothing to the projection.</p>
     <p><b>Gestures:</b> tap a card for the full page · swipe right to add to slip · swipe left to hide.</p>
     <p style="color:var(--ink-3);font-size:12px">Team names, logos and player photos belong to their owners and are shown for reference only.</p>`));
   $("#alertsBtn").addEventListener("click", () => { const s = openSheet(`<div class="sh-top"><h2>Notifications</h2><button class="btn small" data-close>Done</button></div>
