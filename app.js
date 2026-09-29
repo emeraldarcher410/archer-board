@@ -135,6 +135,8 @@
   }
   function verdictChip(r) {
     if (r.fav) return `<span class="verdict fav">★ Top play</span>${kindChip(r)}${timingChip(r)}`;
+    // ADR-0092: NFL leans from projection vs line while NFL chances follow the market
+    if (r.nfl_lean) return `<span class="verdict ${r.nfl_lean === "strong" ? "strong" : "lean"}" title="${esc(r.nfl_lean_why || "")}">${r.nfl_lean === "strong" ? "Strong lean" : "Lean"} · unproven</span>`;
     const c = r.verdict === "Strong lean" ? "strong" : r.verdict === "Lean" ? "lean" : r.verdict === "Split" ? "split" : r.verdict === "Out" ? "out" : "";
     return r.verdict ? `<span class="verdict ${c}">${esc(r.verdict === "Split" ? "Mixed" : r.verdict)}</span>${kindChip(r)}` : "";
   }
@@ -270,6 +272,7 @@
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (!f.lowvol) rows = rows.filter((r) => !r.volume || r.low_ok); // ADR-0048/0050: backups' props unless the market backs them
     if (f.mlean) rows = rows.filter(isMLean); // ADR-0057
+    if (f.nlean) rows = rows.filter((r) => r.nfl_lean); // ADR-0092
     if (f.td) rows = rows.filter((r) => isTD(r) && r.side === "over"); // ADR-0062
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
@@ -279,8 +282,9 @@
     if (f.watch) rows = rows.filter((r) => state.watch.has(normName(r.player_ref)));
     if (q) rows = rows.filter((r) => [r.player_ref, r.home_team, r.away_team, r.opponent, r.form_team].some((v) => String(v ?? "").toLowerCase().includes(q)));
     const w = (r) => (state.watch.has(normName(r.player_ref)) ? 1 : 0);
+    const nl = (r) => (r.nfl_lean === "strong" ? 2 : r.nfl_lean ? 1 : 0); // ADR-0092
     const by = {
-      edge: (x, y) => w(y) - w(x) || (y.fav ? 1 : 0) - (x.fav ? 1 : 0) || (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9),
+      edge: (x, y) => w(y) - w(x) || (y.fav ? 1 : 0) - (x.fav ? 1 : 0) || nl(y) - nl(x) || (y.agree_count ?? 0) - (x.agree_count ?? 0) || (y.edge ?? -9) - (x.edge ?? -9),
       kick: (x, y) => String(x.commence_time || "").localeCompare(String(y.commence_time || "")) || (y.edge ?? -9) - (x.edge ?? -9),
       name: (x, y) => String(x.player_ref).localeCompare(String(y.player_ref)),
       matchup: (x, y) => (y.matchup_score ?? 0) - (x.matchup_score ?? 0) || mEdge(y) - mEdge(x),
@@ -337,8 +341,9 @@
     renderApplied(); renderPresets();
   }
   // ADR-0046: one-tap views, and your own saved ones
-  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false, pick: "all" };
+  const F0 = { agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all", lowvol: false, mlean: false, td: false, pick: "all", nlean: false };
   const PRESETS = [
+    { id: "nlean", name: "NFL leans · unproven", league: "nfl", f: { ...F0, agree: 0, nlean: true } }, // ADR-0092
     { id: "hr", name: "Hard Rock NFL · worth a look", league: "nfl", f: { ...F0, agree: 2, book: "hardrockbet_fl", kind: "book" } },
     { id: "pk", name: "College pick'em · worth a look", league: "cfb", f: { ...F0, agree: 2, kind: "pickem" } },
     { id: "mlean", name: "Matchup leans", league: null, f: { ...F0, agree: 0, mlean: true, sort: "matchup" } },
@@ -375,6 +380,7 @@
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
     if (f.mlean) out.push(["mlean", "Matchup leans"]);
+    if (f.nlean) out.push(["nlean", "NFL leans · unproven"]);
     if (f.pick === "likely" || f.pick === "value") out.push(["pick", f.pick === "likely" ? "Likely picks" : "Value picks"]);
     if (f.td) out.push(["td", "Touchdowns"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : f.sort === "matchup" ? "Sort: best matchup" : "Sort: A–Z"]);
@@ -780,6 +786,7 @@
       <dl>
         <dt>★ Top play</dt><dd>Both methods (his recent games and the matchup) clear what the price needs by 3+ points. Our strongest call. It has nothing to do with the betting favorite: a +130 side can be a top play when we think it wins more often than +130 needs (43%).</dd>
         <dt>Likely · Value</dt><dd>Every pick that clears its price gets one. <b>Likely</b>: we give it 50%+ (it should hit more often than not). <b>Value</b>: we give it under 50%, but the price pays more than it needs, so it wins over many bets while losing more often than it wins. Stake value picks smaller. Both are graded separately every week.</dd>
+        <dt>NFL lean · unproven</dt><dd>NFL chances follow the market until our results earn our view back (checked every Tuesday). Meanwhile these leans come straight from how far our projection sits from the line. <b>Strong lean</b> = an over where we project well above the line, the one group that beat the market in weeks 2–3. Unproven: stake small. They become NFL top plays only if the next 150+ graded strong leans beat the market clearly. Deep unders, big gaps, backups and players with news against them never get one.</dd>
         <dt>Strong lean / Lean</dt><dd>Both methods agree the side is worth it; strong = by a wider margin.</dd>
         <dt>Mixed / Pass</dt><dd>The methods disagree, or neither beats the price. Skip it.</dd>
         <dt>Check news</dt><dd>Something the numbers can't see: news against the pick, a player coming back from an injury, or a gap to the line so big the sportsbook probably knows something. Held back from ★.</dd>
