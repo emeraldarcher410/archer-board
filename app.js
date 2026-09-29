@@ -2344,8 +2344,17 @@
     const theirs = nx ? teamRanks(lg, nx.opp) : [], rk = (list, key) => list.find((x) => x.c.key === key);
     const badge = (x) => (x ? `<span class="rkb ${x.c.better ? rkCls(x.r.rank, x.of) : ""}">${ordinal(x.r.rank)}</span>` : "—");
     const groups = [...new Set(mine.map((x) => x.c.group))];
-    const vs = nx ? PAIRS.map(([a, d, label]) => { const us = rk(mine, a), them = rk(theirs, d), us2 = rk(mine, d), them2 = rk(theirs, a);
-      return (us && them) || (us2 && them2) ? `<tr><td>${label}</td><td>${badge(us)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, tid))} O</small></td><td>${badge(them)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, nx.opp))} D</small></td></tr><tr><td></td><td>${badge(them2)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, nx.opp))} O</small></td><td>${badge(us2)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, tid))} D</small></td></tr>` : ""; }).join("") : "";
+    // two halves, one per offense: the second row used to carry no label and read as a mystery
+    const vsHalf = (off, offList, def, defList) => {
+      const rows = PAIRS.map(([a, d, label]) => {
+        const o = rk(offList, a), x = rk(defList, d); if (!o || !x) return "";
+        const of = o.of || x.of || 1, gap = (x.r.rank - o.r.rank) / of; // + = the offense's edge
+        const edge = Math.abs(gap) >= 0.15 ? `<small class="${gap > 0 ? "up" : "dn"}">${esc(abbr(lg, gap > 0 ? off : def))} edge</small>` : `<small>even</small>`;
+        return `<tr><td>${label}</td><td>${badge(o)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, off))} O</small></td><td>${badge(x)}<br><small style="color:var(--ink-3)">${esc(abbr(lg, def))} D</small></td><td class="edge">${edge}</td></tr>`;
+      }).join("");
+      return rows ? `<tr class="vs-h"><td colspan="4">When ${esc(abbr(lg, off))} has the ball</td></tr>${rows}` : "";
+    };
+    const vs = nx ? vsHalf(tid, mine, nx.opp, theirs) + vsHalf(nx.opp, theirs, tid, mine) : "";
     openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button></div>
       <div class="hero v3" style="--tc:${esc((t && t.color) || "#334155")};--tc2:${esc((t && t.color2) || (t && t.color) || "#334155")};min-height:120px"><div class="wm2">${esc(abbr(lg, tid))}</div>
         <div class="txt">${t && t.logo ? `<img class="tlogo" src="${esc(t.logo)}" alt="" onerror="this.remove()">` : ""}<div class="nm2">${esc((t && t.name) || tid)}</div>${nx ? `<div class="sub2">next: ${nx.home ? "vs" : "@"} ${esc(abbr(lg, nx.opp))} · ${esc(when(nx.g.kickoff_utc).txt)}</div>` : ""}</div></div>
