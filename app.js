@@ -1529,6 +1529,11 @@
       : `<div class="empty" style="padding:14px">Nothing graded yet.</div>`;
   }
   function renderRecord() {
+    // NFL leans (ADR-0092) are an NFL-only rule: no tab for college, and a college view never
+    // sits on it
+    const leanChip = $('#recFilters [data-rec="lean"]'), nfl = state.league !== "cfb";
+    if (leanChip) leanChip.style.display = nfl ? "" : "none";
+    if (!nfl && state.recFilter === "lean") { state.recFilter = "fav"; $$("#recFilters .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.rec === "fav"))); }
     const all = gradedHistory().concat(gradedGames()), f = state.recFilter;
     const liked = (r) => (r.agree_count ?? 0) >= 1 || r.game || (isTD(r) && (r.edge > 0 || r.off_market));
     // ADR-0093: the report card follows the tab, so each tab's markets can be read on their own
