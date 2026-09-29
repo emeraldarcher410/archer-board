@@ -1504,7 +1504,8 @@
     const area = `${path}L${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z`;
     const days = []; seq.forEach((r, i) => { const d = String(r.commence_time || "").slice(0, 10); if (d && (!days.length || days[days.length - 1].d !== d)) days.push({ d, i: i + 1 }); });
     const step = Math.max(1, Math.ceil(days.length / 5));
-    const ticks = days.filter((_, k) => k % step === 0).map(({ d, i }) => { const dt = new Date(d + "T12:00:00"); return `<text x="${x(i).toFixed(1)}" y="${B + 16}" text-anchor="middle">${dt.getMonth() + 1}/${dt.getDate()}</text>`; }).join("");
+    let lastX = -99; // day labels at least 30px apart: busy days bunch their first picks together
+    const ticks = days.filter((_, k) => k % step === 0).filter(({ i }) => { if (x(i) - lastX < 30) return false; lastX = x(i); return true; }).map(({ d, i }) => { const dt = new Date(d + "T12:00:00"); return `<text x="${x(i).toFixed(1)}" y="${B + 16}" text-anchor="middle">${dt.getMonth() + 1}/${dt.getDate()}</text>`; }).join("");
     const fmt = (v) => (v >= 0 ? "+" : "") + v.toFixed(1) + "u";
     return `<svg class="units" viewBox="0 0 ${W} ${H}" role="img" aria-label="Running units ${fmt(last)}">
       <defs><linearGradient id="ug" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".28"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
@@ -1528,12 +1529,67 @@
       <div class="foot" style="margin:8px 0 0">The picks in the tab above, by market: props (touchdowns included) and, under Either clears, the model's spread, total and moneyline sides at Hard Rock. Last ${(state.history && state.history.days) || 14} days. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
       : `<div class="empty" style="padding:14px">Nothing graded yet.</div>`;
   }
+  // ADR-0095: the game model's projected score for every game, graded against the line it was
+  // up against at the last board before kickoff. Finals come from history.json (the server
+  // attaches them for the season); results.json covers the last few days if one is missing.
+  function gradedModels() {
+    const gm = ((state.history && state.history.game_models) || []).filter((x) => x.league === state.league), res = state.results;
+    const g3 = (v) => (v > 0 ? "won" : v < 0 ? "lost" : "push");
+    return gm.map((x) => {
+      let hs = x.home_score, as = x.away_score;
+      if ((hs == null || as == null) && res && res.games) {
+        const f = res.games.find((g) => g.league === x.league && (String(g.game_id) === String(x.game_id) || (g.home === x.home && g.away === x.away && dayDiff(g.date, x.date) <= 1)));
+        if (f) { hs = f.home_score; as = f.away_score; }
+      }
+      if (hs == null || as == null) return null;
+      const m = hs - as, t = hs + as;
+      return { ...x, hs, as, m, t,
+        su: x.su_pick ? g3(x.su_pick === "home" ? m : -m) : null,
+        ats: x.ats_pick && x.mkt_margin != null ? g3(x.ats_pick === "home" ? m - x.mkt_margin : x.mkt_margin - m) : null,
+        tot: x.total_pick && x.mkt_total != null ? g3(x.total_pick === "over" ? t - x.mkt_total : x.mkt_total - t) : null };
+    }).filter(Boolean);
+  }
+  function renderGameCard() {
+    const lg = state.league, rows = gradedModels(), BE = 0.524;
+    const rec = (rs, k) => { const d = rs.filter((r) => r[k] === "won" || r[k] === "lost"), w = d.filter((r) => r[k] === "won").length; return { n: d.length, w, l: d.length - w, p: rs.filter((r) => r[k] === "push").length, hit: d.length ? w / d.length : null }; };
+    const big = (gk) => rows.filter((r) => r[gk] != null && Math.abs(r[gk]) >= 3);
+    const lines = [["Picked the winner", rec(rows, "su"), null], ["Against the spread", rec(rows, "ats"), BE], ["· 3+ pts off the line", rec(big("ats_gap"), "ats"), BE],
+      ["Totals (over/under)", rec(rows, "tot"), BE], ["· 3+ pts off the line", rec(big("total_gap"), "tot"), BE]];
+    const wl = (x) => `${x.w}–${x.l}${x.p ? "–" + x.p : ""}`;
+    // average miss on the final margin and total: ours vs the line's, on games where both exist
+    const miss = (mk, lk, act) => { const s = rows.filter((r) => r[mk] != null && r[lk] != null); if (!s.length) return null; const a = (f) => s.reduce((z, r) => z + Math.abs(r[act] - f(r)), 0) / s.length; return { n: s.length, ours: a((r) => r[mk]), line: a((r) => r[lk]) }; };
+    const mm = miss("model_margin", "mkt_margin", "m"), mt = miss("model_total", "mkt_total", "t"), ats = lines[1][1], tot = lines[3][1];
+    const kpi = (v, lab, good) => `<div class="kpi ${good == null ? "" : good ? "good" : "bad"}"><b>${v}</b><span>${lab}</span></div>`;
+    $("#recSub").textContent = "this season";
+    const b3 = [lines[2][1], lines[4][1]].reduce((a, x) => ({ w: a.w + x.w, l: a.l + x.l, p: a.p + x.p, n: a.n + x.n }), { w: 0, l: 0, p: 0, n: 0 }), su = lines[0][1];
+    $("#recKpis").innerHTML = kpi(ats.n ? wl(ats) : "—", "Spread", ats.n ? ats.hit >= BE : null) + kpi(tot.n ? wl(tot) : "—", "Totals", tot.n ? tot.hit >= BE : null)
+      + kpi(su.n ? wl(su) : "—", "Winners", null) + kpi(b3.n ? wl(b3) : "—", "3+ pts", b3.n ? b3.w / b3.n >= BE : null);
+    const close = [["Final margin", mm], ["Final total", mt]].filter(([, x]) => x);
+    $("#card").innerHTML = rows.length ? `<table class="rc"><tr><th></th><th>Games</th><th>Record</th><th>Hit</th><th>Needs</th></tr>${lines.map(([lab, x, need]) => `<tr><td>${esc(lab)}</td><td>${x.n}</td><td>${x.n ? wl(x) : "—"}</td><td style="color:${x.hit == null || need == null ? "inherit" : x.hit >= need ? "var(--accent-2)" : "var(--red)"}">${x.hit == null ? "—" : pct(x.hit)}</td><td>${need ? pct(need) : "—"}</td></tr>`).join("")}</table>
+      ${close.length ? `<table class="rc" style="margin-top:12px"><tr><th>Average miss</th><th>Games</th><th>Ours</th><th>Line</th></tr>${close.map(([lab, x]) => `<tr><td>${lab}</td><td>${x.n}</td><td style="color:${x.ours <= x.line ? "var(--accent-2)" : "var(--red)"}">${x.ours.toFixed(1)} pts</td><td>${x.line.toFixed(1)} pts</td></tr>`).join("")}</table>` : ""}
+      <div class="foot" style="margin:8px 0 0">Every ${lg === "cfb" ? "college" : "NFL"} game our model projected, graded against the line at the last board before kickoff (Hard Rock's when it had one, else the market's). "3+ pts off the line" are the games the Games tab lists as model bets; 52.4% breaks even at −110. Margin and total miss = how far the final landed from our projected score, on average, next to how far it landed from the line: lower wins. The line is hard to beat; the ${lg === "cfb" ? "college" : "NFL"} model has no proven edge yet.</div>`
+      : `<div class="empty" style="padding:14px">No graded games yet — they appear after games we projected are final.</div>`;
+    const bets = [];
+    rows.forEach((r) => { if (r.ats_gap != null && Math.abs(r.ats_gap) >= 3 && (r.ats === "won" || r.ats === "lost")) bets.push({ grade: r.ats, breakeven_p: BE, commence_time: r.kickoff }); if (r.total_gap != null && Math.abs(r.total_gap) >= 3 && (r.tot === "won" || r.tot === "lost")) bets.push({ grade: r.tot, breakeven_p: BE, commence_time: r.kickoff }); });
+    $("#units").innerHTML = unitsChart(bets) + (bets.length >= 2 ? `<div class="foot" style="margin:4px 0 0">1 unit at −110 on every spread and total 3+ points off the line.</div>` : "");
+    const spreadTxt = (r) => { const v = r.mkt_margin; return v == null ? "—" : v === 0 ? "pick'em" : `${abbr(lg, v > 0 ? r.home : r.away)} −${Math.abs(v)}`; };
+    const said = (r) => r.model_margin != null ? `We said ${abbr(lg, r.model_margin >= 0 ? r.home : r.away)} by ${Math.abs(r.model_margin).toFixed(1)}, ${Math.round(r.model_total)} pts` : `We took ${r.ats_pick ? abbr(lg, r[r.ats_pick]) : "—"}${r.total_pick ? " and the " + r.total_pick : ""}`;
+    const mark = (g) => (g === "won" ? "✓" : g === "lost" ? "✗" : g === "push" ? "push" : "—");
+    const byDay = {}; rows.forEach((r) => { (byDay[r.date] = byDay[r.date] || []).push(r); });
+    const days = Object.keys(byDay).sort().reverse();
+    $("#recList").innerHTML = days.length ? days.map((d) => `<div class="dayh">${new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</div>` + byDay[d].map((r) => `<div class="res"><span class="mk2 ${r.ats === "won" ? "w" : r.ats === "lost" ? "l" : "p"}">${r.ats === "won" ? "✓" : r.ats === "lost" ? "✗" : "–"}</span>
+      <div><b>${esc(abbr(lg, r.away))} @ ${esc(abbr(lg, r.home))}</b><small>${esc(said(r))} · line ${esc(spreadTxt(r))}, O/U ${r.mkt_total ?? "—"}</small><small>Spread ${mark(r.ats)} · Total ${mark(r.tot)} · Winner ${mark(r.su)}</small></div><div class="act">${r.as}–${r.hs}<small style="display:block;font-size:11px;color:var(--ink-3)">final</small></div></div>`).join("")).join("")
+      : `<div class="empty" style="padding:14px">No graded games yet.</div>`;
+  }
   function renderRecord() {
     // NFL leans (ADR-0092) are an NFL-only rule: no tab for college, and a college view never
     // sits on it
     const leanChip = $('#recFilters [data-rec="lean"]'), nfl = state.league !== "cfb";
     if (leanChip) leanChip.style.display = nfl ? "" : "none";
     if (!nfl && state.recFilter === "lean") { state.recFilter = "fav"; $$("#recFilters .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.rec === "fav"))); }
+    const calP = $("#cal").parentElement, cardH = $("#card").parentElement.querySelector("h3 span:last-child");
+    if (state.recFilter === "games") { calP.style.display = "none"; if (cardH) cardH.textContent = "our projected scores"; renderGameCard(); return; }
+    calP.style.display = ""; if (cardH) cardH.textContent = "by market";
     const all = gradedHistory().concat(gradedGames()), f = state.recFilter;
     const liked = (r) => (r.agree_count ?? 0) >= 1 || r.game || (isTD(r) && (r.edge > 0 || r.off_market));
     // ADR-0093: the report card follows the tab, so each tab's markets can be read on their own
