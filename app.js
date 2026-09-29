@@ -1012,6 +1012,12 @@
     const row = rows.filter((r) => r.min_diff <= Math.abs(d) && r.win_rate != null).sort((a, b) => b.min_diff - a.min_diff)[0];
     return row ? { rate: row.win_rate, w: row.wins, l: row.losses, min: row.min_diff } : null;
   }
+  // ADR-0098: a spread 7+ points off the line is more often missing news than an edge
+  // (walk-forward 2023-25, ADR-0096/0097). Fixed backtest numbers, shown as a warning only.
+  const BIG_GAP = 7;
+  const bigGapNote = (lg) => lg === "cfb"
+    ? "7+ pts off the line: in 2023–25 college picks this far off hit about half the time against the spread (52.4% needed). Check injury and depth news first."
+    : "7+ pts off the line: in 2023–25 the line was usually right at this size — when we had the underdog winning, they won 4 of 27. Check injury and QB news first.";
   function modelBets(pairs, minPts) {
     const out = [];
     for (const [lg, gs] of pairs) for (const g of gs || []) {
@@ -1022,7 +1028,7 @@
         const d = sp.model_vs_line_pts, leg = legs[d > 0 ? "spread_home" : "spread_away"], m = g.model.margin ?? (g.model.home - g.model.away);
         const fav = m >= 0 ? g.home : g.away;
         if (leg) out.push({ ...leg, g, lg, kind: "spread", d, rec: modelRecord(lg, "spread", d),
-          why: `We project ${abbr(lg, fav)} by ${Math.abs(m).toFixed(1)}; Hard Rock's line is ${abbr(lg, g.home)} ${sp.home_line > 0 ? "+" : ""}${sp.home_line}` });
+          why: `We project ${abbr(lg, fav)} by ${Math.abs(m).toFixed(1)}; Hard Rock's line is ${abbr(lg, g.home)} ${sp.home_line > 0 ? "+" : ""}${sp.home_line}${Math.abs(d) >= BIG_GAP ? " · ⚠ " + bigGapNote(lg) : ""}` });
       }
       if (tt && tt.model_vs_line_pts != null && Math.abs(tt.model_vs_line_pts) >= minPts) {
         const d = tt.model_vs_line_pts, leg = legs[d > 0 ? "over" : "under"];
@@ -1105,10 +1111,12 @@
       const d = mm - g.spread_line, mk = `${who(g.spread_line)} by ${Math.abs(g.spread_line)}`;
       pts.push(Math.abs(d) < 1.5 ? { good: true, t: `Agrees with the market (${mk})` } : { good: null, t: `Likes ${who(d)} more than the market does (market ${mk}; ${Math.abs(d).toFixed(1)}-pt gap)` });
     }
+    const spGap = g.spread && g.spread.model_vs_line_pts != null ? g.spread.model_vs_line_pts : g.spread_line != null ? mm - g.spread_line : null;
+    if (spGap != null && Math.abs(spGap) >= BIG_GAP) pts.push({ good: false, t: bigGapNote(league) });
     if (g.total_line != null) { const d = tot - g.total_line; pts.push(Math.abs(d) < 2 ? { good: true, t: `Total in line with the market (${g.total_line})` } : { good: null, t: `Sees ${d > 0 ? "more" : "fewer"} points than the market's ${g.total_line} (${Math.abs(d).toFixed(1)} pts)` }); }
     const edges = (g.battles || []).filter((b) => b.good_for && b.league).map((b) => ({ b, r: b.value / b.league })).sort((x, y) => Math.abs(y.r - 1) - Math.abs(x.r - 1)).slice(0, 2);
     edges.forEach(({ b, r }) => { const offEdge = b.good_for === "off" ? r > 1 : r < 1; pts.push({ good: null, t: `${abbr(league, offEdge ? b.off : b.def)} edge: ${String(b.label || b.unit).replace(new RegExp(`\\b(${[b.off, b.def].map((x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g"), (x) => abbr(league, x))}` }); });
-    return `<div class="panel glance"><div class="gh">${head}</div>${pts.map((f) => `<div class="gf ${f.good === true ? "up" : "nt"}"><i>${f.good === true ? "✓" : "•"}</i><span>${esc(f.t)}</span></div>`).join("")}<div class="foot" style="margin:6px 0 0">Game scores are information only: the model has no proven edge on spreads or totals.</div></div>`;
+    return `<div class="panel glance"><div class="gh">${head}</div>${pts.map((f) => `<div class="gf ${f.good === true ? "up" : f.good === false ? "dn" : "nt"}"><i>${f.good === true ? "✓" : f.good === false ? "⚠" : "•"}</i><span>${esc(f.t)}</span></div>`).join("")}<div class="foot" style="margin:6px 0 0">Game scores are information only: the model has no proven edge on spreads or totals.</div></div>`;
   }
   function openGame(g, league) {
     if (!g) return;
@@ -1569,6 +1577,18 @@
       ${close.length ? `<table class="rc" style="margin-top:12px"><tr><th>Average miss</th><th>Games</th><th>Ours</th><th>Line</th></tr>${close.map(([lab, x]) => `<tr><td>${lab}</td><td>${x.n}</td><td style="color:${x.ours <= x.line ? "var(--accent-2)" : "var(--red)"}">${x.ours.toFixed(1)} pts</td><td>${x.line.toFixed(1)} pts</td></tr>`).join("")}</table>` : ""}
       <div class="foot" style="margin:8px 0 0">Every ${lg === "cfb" ? "college" : "NFL"} game our model projected, graded against the line at the last board before kickoff (Hard Rock's when it had one, else the market's). "3+ pts off the line" are the games the Games tab lists as model bets; 52.4% breaks even at −110. Margin and total miss = how far the final landed from our projected score, on average, next to how far it landed from the line: lower wins. The line is hard to beat; the ${lg === "cfb" ? "college" : "NFL"} model has no proven edge yet.</div>`
       : `<div class="empty" style="padding:14px">No graded games yet — they appear after games we projected are final.</div>`;
+    // ADR-0096: upset calls (our winner is the line's underdog) at Hard Rock's moneyline, and
+    // every pick by how sure we were
+    const beOf = (p) => (p == null ? null : p > 0 ? 100 / (p + 100) : -p / (-p + 100));
+    const ml = (rs) => { const s = rs.filter((r) => (r.su === "won" || r.su === "lost") && r.su_price != null); if (!s.length) return null; const u = s.reduce((a, r) => a + (r.su === "won" ? (r.su_price > 0 ? r.su_price / 100 : 100 / -r.su_price) : -1), 0); return { n: s.length, need: s.reduce((a, r) => a + beOf(r.su_price), 0) / s.length, u }; };
+    const ups = rows.filter((r) => r.upset), ups3 = ups.filter((r) => r.model_margin != null && Math.abs(r.model_margin) >= 3);
+    const upRow = (lab, rs) => { const su2 = rec(rs, "su"), a = rec(rs, "ats"), m = ml(rs); return `<tr><td>${lab}</td><td>${su2.n}</td><td>${su2.n ? wl(su2) : "—"}</td><td>${su2.n ? pct(su2.hit) : "—"}</td><td>${m ? pct(m.need) : "—"}</td><td style="color:${m ? (m.u >= 0 ? "var(--accent-2)" : "var(--red)") : "inherit"}">${m ? (m.u >= 0 ? "+" : "") + m.u.toFixed(1) + "u" : "—"}</td><td>${a.n ? wl(a) : "—"}</td></tr>`; };
+    const upHtml = `<h4 class="gc-h">When we pick the underdog to win</h4>${ups.length ? `<table class="rc"><tr><th></th><th>Games</th><th>Won</th><th>Hit</th><th>Needs</th><th>ML</th><th>ATS</th></tr>${upRow("All", ups)}${upRow("Ours by 3+", ups3)}</table><div class="foot" style="margin:6px 0 0">Won = our team won outright. Needs = what Hard Rock's moneyline price had to hit; ML = 1 unit on each at that price. ATS = our side against the spread in those games.</div>` : `<div class="foot" style="margin:6px 0 0">No upset calls graded yet.</div>`}`;
+    const cbin = (key, res, edges, need) => edges.slice(0, -1).map((lo, i) => { const hi = edges[i + 1], s = rows.filter((r) => r[key] != null && r[key] >= lo && r[key] < hi && (r[res] === "won" || r[res] === "lost")); if (!s.length) return ""; const w = s.filter((r) => r[res] === "won").length, hit = w / s.length, said = s.reduce((a, r) => a + r[key], 0) / s.length, bar = need ?? said;
+      return `<tr><td>${pct(lo)}${hi > 1 ? "+" : "–" + pct(hi)}</td><td>${s.length}</td><td>${w}–${s.length - w}</td><td style="color:${hit >= bar ? "var(--accent-2)" : "var(--red)"}">${pct(hit)}</td><td>${pct(said)}</td></tr>`; }).join("");
+    const confRows = [["Winner", cbin("win_conf", "su", [0.5, 0.6, 0.7, 0.8, 1.01], null)], ["Spread", cbin("ats_conf", "ats", [0.5, 0.55, 0.6, 1.01], BE)], ["Total", cbin("tot_conf", "tot", [0.5, 0.55, 0.6, 1.01], BE)]].filter(([, h]) => h);
+    const confHtml = `<h4 class="gc-h">By how sure we were</h4>${confRows.length ? `<table class="rc"><tr><th>Our chance</th><th>Games</th><th>Record</th><th>Hit</th><th>We said</th></tr>${confRows.map(([lab, h]) => `<tr class="sec"><td colspan="5">${lab}</td></tr>${h}`).join("")}</table><div class="foot" style="margin:6px 0 0">Our chance for the side we picked. Hit should land near "we said"; for spreads and totals it also has to clear 52.4%. High confidence that doesn't hit more is not confidence.</div>` : `<div class="foot" style="margin:6px 0 0">No graded games with our chances yet.</div>`}`;
+    $("#card").insertAdjacentHTML("beforeend", rows.length ? upHtml + confHtml : "");
     const bets = [];
     rows.forEach((r) => { if (r.ats_gap != null && Math.abs(r.ats_gap) >= 3 && (r.ats === "won" || r.ats === "lost")) bets.push({ grade: r.ats, breakeven_p: BE, commence_time: r.kickoff }); if (r.total_gap != null && Math.abs(r.total_gap) >= 3 && (r.tot === "won" || r.tot === "lost")) bets.push({ grade: r.tot, breakeven_p: BE, commence_time: r.kickoff }); });
     $("#units").innerHTML = unitsChart(bets) + (bets.length >= 2 ? `<div class="foot" style="margin:4px 0 0">1 unit at −110 on every spread and total 3+ points off the line.</div>` : "");
