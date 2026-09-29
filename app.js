@@ -1525,22 +1525,27 @@
       return { mk, n, hit, need, clv, badge };
     }).sort((a, b) => b.n - a.n);
     return rows.length ? `<table class="rc"><tr><th>Market</th><th>Picks</th><th>Hit</th><th>Needs</th><th>CLV</th></tr>${rows.map((x) => `<tr><td>${esc(LABEL[x.mk] || GLABEL[x.mk] || x.mk)} <span class="badge ${x.badge}">${x.badge}</span></td><td>${x.n}</td><td style="color:${x.hit >= x.need ? "var(--accent-2)" : "var(--red)"}">${pct(x.hit)}</td><td>${pct(x.need)}</td><td>${x.clv == null ? "—" : (x.clv >= 0 ? "+" : "") + (x.clv * 100).toFixed(1)}</td></tr>`).join("")}</table>
-      <div class="foot" style="margin:8px 0 0">Every side the board liked, graded: props (touchdowns included) and the model's spread, total and moneyline sides at Hard Rock. Last ${(state.history && state.history.days) || 14} days. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
+      <div class="foot" style="margin:8px 0 0">The picks in the tab above, by market: props (touchdowns included) and, under Either clears, the model's spread, total and moneyline sides at Hard Rock. Last ${(state.history && state.history.days) || 14} days. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
       : `<div class="empty" style="padding:14px">Nothing graded yet.</div>`;
   }
   function renderRecord() {
     const all = gradedHistory().concat(gradedGames()), f = state.recFilter;
-    $("#card").innerHTML = reportCard(all);
     const liked = (r) => (r.agree_count ?? 0) >= 1 || r.game || (isTD(r) && (r.edge > 0 || r.off_market));
-    const pick = all.filter((r) => (f === "fav" ? r.fav : f === "both" ? (r.agree_count ?? 0) >= 2 : liked(r)));
+    // ADR-0093: the report card follows the tab, so each tab's markets can be read on their own
+    const pick = all.filter((r) => (f === "fav" ? r.fav : f === "both" ? (r.agree_count ?? 0) >= 2 : f === "lean" ? !!r.nfl_lean : liked(r)));
+    $("#card").innerHTML = reportCard(pick);
     const dec2 = pick.filter((r) => r.grade !== "push"), w = dec2.filter((r) => r.grade === "won").length, n = dec2.length;
     const need = n ? dec2.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n : null;
-    const profit = dec2.reduce((a, r) => a + (r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1), 0);
+    const won1 = (r) => (r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1);
+    const profit = dec2.reduce((a, r) => a + won1(r), 0);
+    // a profit that rests on one or two longshots is not an edge (ADR-0093): say so
+    const top2 = dec2.map(won1).filter((u) => u > 0).sort((a, b) => b - a).slice(0, 2), ex2 = profit - top2.reduce((a, u) => a + u, 0);
+    const longshot = n && profit > 0 && top2[0] >= 3 && ex2 < profit / 2 ? `<div class="kpi bad" style="grid-column:1/-1"><b>${ex2 >= 0 ? "+" : "−"}${Math.abs(ex2).toFixed(1)}u</b><span style="white-space:normal">without the ${top2.length === 1 ? "biggest winner" : "two biggest winners"} (+${top2.map((u) => u.toFixed(1)).join("u, +")}u) — this profit is mostly longshot luck</span></div>` : "";
     $("#recSub").textContent = state.history ? `last ${state.history.days || 14} days` : "";
     $("#recKpis").innerHTML = `<div class="kpi"><b>${w}–${n - w}</b><span>Record</span></div>
       <div class="kpi ${n && w / n >= (need || 0.524) ? "good" : n ? "bad" : ""}"><b>${n ? pct(w / n) : "—"}</b><span>Hit rate</span></div>
       <div class="kpi"><b>${need ? pct(need) : "—"}</b><span>Needed</span></div>
-      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>`;
+      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>${longshot}`;
     $("#units").innerHTML = unitsChart(dec2);
     // calibration on everything graded, by the best estimate
     const bins = [[0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
