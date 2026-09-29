@@ -1052,6 +1052,11 @@
         : `<div class="tempty">Our score is within 3 points of every Hard Rock line right now.</div>`}
       ${price.length ? `<h3 style="margin-top:14px"><span>Better prices at Hard Rock</span></h3>${price.map((l) => `<div class="trow"><span class="mk2 p">⚖</span><div><b>${esc(l.label)}</b> <span style="color:var(--ink-3)">${odds(l.price)}</span><small>wins ${howOften(l.mkt.p)} · ${per100(l.mkt.ev)} over time</small></div><div class="pv gbv"><span class="vt">${priceTier(l.mkt.ev)}</span></div></div>`).join("")}` : ""}
       <div class="foot" style="margin:6px 0 0"><b>How to read a game:</b> <b>us</b> = our game model's chance · <b>books</b> = the other sportsbooks' chance, margin removed · <b>needs</b> = how often it must win for Hard Rock's price to pay · green = Hard Rock pays more than the books think it should.</div></div>`;
+    // the game list itself (dropped by mistake in ADR-0081's rewrite; restored in ADR-0087)
+    const next = all.slice().sort((a, b) => String(a.kickoff_utc || a.kickoff).localeCompare(String(b.kickoff_utc || b.kickoff)))[0];
+    const nextTxt = next ? new Date(next.kickoff_utc || next.kickoff).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }) : "";
+    $("#games").innerHTML = gamesShown.length ? gamesShown.map((g, i) => gameCard(g, league, i)).join("")
+      : `<div class="empty"><b>${all.length ? `No ${league === "cfb" ? "college" : "NFL"} games ${state.day === "tomorrow" ? "tomorrow" : "today"}` : "No games yet"}</b>${all.length ? `${all.length} games this week${nextTxt ? `, the first on ${esc(nextTxt)}` : ""}. <button class="btn small" data-allgames>See all games</button>` : "Games publish with the next board."}</div>`;
   }
   $("#gBest").addEventListener("click", (e) => {
     const r = e.target.closest("[data-gb]"); if (!r) return;
@@ -1059,6 +1064,7 @@
     if (card) { card.scrollIntoView({ behavior: "smooth", block: "start" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1400); }
   });
   $("#games").addEventListener("click", (e) => {
+    if (e.target.closest("[data-allgames]")) { state.day = "all"; $$("#dayFilters .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.day === "all"))); renderGames(); return; }
     const b = e.target.closest("button[data-gleg]");
     if (b) { e.stopPropagation(); toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
     const c = e.target.closest("[data-g]"); if (c) openGame(gamesShown[Number(c.dataset.g)], state.league);
