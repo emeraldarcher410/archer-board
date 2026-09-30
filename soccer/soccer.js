@@ -90,6 +90,10 @@
       .sq{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}.sq:first-child{border-top:0}
       .sq .who small{display:block;color:var(--ink-3);font-size:12px}
       .inj{font-size:13px;color:var(--ink-2);padding:4px 0}.inj b{color:var(--ink)}
+      .prow2{display:grid;grid-template-columns:auto 1fr 58px 64px;gap:10px;align-items:center;padding:10px 2px;border-top:1px solid var(--line);cursor:pointer}.prow2:nth-child(2){border-top:0}
+      .prow2 .who{min-width:0}.prow2 .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow2 .who small{display:block;color:var(--ink-3);font-size:12px;line-height:1.35}
+      .prow2 .a{text-align:center;font:800 24px var(--display);font-variant-numeric:tabular-nums}.prow2 .b{text-align:center;font:700 16px var(--display);color:var(--ink-2);font-variant-numeric:tabular-nums}
+      .prow2.h{cursor:default;padding:0 2px 6px;border-top:0;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);line-height:1.2}.prow2.h span:nth-child(2){grid-column:1/3}.prow2.h span:first-child{display:none}.prow2.h .c{text-align:center}
       .spos{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:8px}
       .spos svg{width:92px;height:auto;display:block}.spos .spt small{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}.spos .spt b{display:block;font:700 17px var(--display);color:var(--ink)}.spos .spt .al{font-size:13.5px;color:var(--ink-2);line-height:1.5}.spos .spt .al i{font-style:normal;color:var(--ink-3)}.spos .spt div+div{margin-top:10px}
       .hexw{max-width:360px;margin:0 auto}.hexw svg{width:100%;height:auto;display:block;overflow:visible}
@@ -434,8 +438,8 @@
       <div>${likes.length ? likes.slice(0, 20).map(likeCard).join("") : `<div class="tempty">No book line clears the bar right now. Lines post about 6 hours before kickoff.</div>`}</div>
       <div class="sec-h"><h2>Projections</h2><span>if he starts</span></div>
       <div class="schips">${MK.map(([k, lab]) => `<button class="chip" data-smk="${k}" aria-pressed="${S.mk === k}">${lab}</button>`).join("")}</div>
-      <div class="panel">${rows.length ? rows.map((x, i) => projRow(x, i)).join("") : `<div class="tempty">No projections yet for these matches.</div>`}</div>
-      <div class="foot">Projections assume the player starts (projected XIs until lineups are confirmed). Tap a player for his page.</div>`;
+      <div class="panel">${rows.length ? projHead() + rows.map((x, i) => projRow(x, i)).join("") : `<div class="tempty">No projections yet for these matches.</div>`}</div>
+      <div class="foot">If he starts: the number he's expected to average in this match, and our chance he reaches the threshold. "Starts" is his chance of starting (projected XI) until the lineups are confirmed. Tap a player for every threshold and his fair odds.</div>`;
     el.onclick = (e) => {
       const l = e.target.closest("[data-slg]"); if (l) { S.lg = l.dataset.slg; store.set("soccer-lg", S.lg); renderProps(el); return; }
       const k = e.target.closest("[data-smk]"); if (k) { S.mk = k.dataset.smk; store.set("soccer-mk", S.mk); buzz(); renderProps(el); return; }
@@ -455,10 +459,23 @@
       <div class="row2"><div class="subrow" style="margin-top:0">${b.book ? `<span class="book"><span class="sw" style="background:${DOT[b.book] || "#94A3B8"}"></span>${esc(BOOK[b.book] || b.book)} <b>${am(b.price)}</b></span>` : ""}${proj && proj.m != null && !isG ? `<span class="projc">Proj <b>${fmt1(proj.m)}</b> ${esc(UNIT[KEY[l.prop]] || "")}</span>` : ""}${unproven}${x.p.why && x.p.why[KEY[l.prop]] ? `<span class="tag good" title="${esc(x.p.why[KEY[l.prop]])}">matchup</span>` : ""}</div></div>
     </div>`;
   }
+  // the leaderboard's two columns per market: what the number is, in words (owner: "3.2 /
+  // 2+ 80%" said nothing). Counts: expected count and the chance of a round threshold;
+  // goals and assists: the chance and its fair odds.
+  const THR = { shots: 1, sot: 1, tackles: 1, saves: 1 }; // index into the p thresholds
+  const THK = { shots: 2, sot: 2, tackles: 2, saves: 3 };
+  function projHead() {
+    const k = S.mk, isP = k === "goal" || k === "assist", lab = (MK.find(([x]) => x === k) || [])[1] || "";
+    const a = isP ? (k === "goal" ? "to score" : "to assist") : `expected ${lab.toLowerCase()}`;
+    const b = isP ? "fair odds" : THK[k] ? `chance of ${THK[k]}+` : "";
+    return `<div class="prow2 h"><span></span><span>${esc(x0(lab))}</span><span class="c">${esc(a)}</span><span class="c">${esc(b)}</span></div>`;
+  }
+  const x0 = (lab) => `Player · ${lab}`;
   function projRow(x, i) {
     const k = S.mk, e = x.p.proj[k], isP = k === "goal" || k === "assist";
-    const big = isP ? pct(e.p[0]) : fmt1(e.m), small = isP ? fairAm(e.p[0]) : e.p ? `${k === "saves" ? 3 : 2}+ ${pct(e.p[k === "saves" ? 1 : 1])}` : UNIT[k];
-    return `<div class="prow" data-row="${i}">${avatar(x.p, x.tid, "sm")}<div class="who"><b>${esc(x.p.name)}</b><small style="display:block;color:var(--ink-3);font-size:12px">${esc(ab(x.tid))} ${x.side === "home" ? "vs" : "@"} ${esc(ab(x.opp))} · ${esc(when(x.m.kickoff).txt)}${x.m.xi[x.side].status === "projected" ? ` · starts ${pct(x.p.p_start)}` : ""}</small></div><div class="big">${big}<small>${esc(small)}</small></div></div>`;
+    const a = isP ? pct(e.p[0]) : fmt1(e.m);
+    const b = isP ? fairAm(e.p[0]) : e.p && THR[k] != null && e.p[THR[k]] != null ? pct(e.p[THR[k]]) : "";
+    return `<div class="prow2" data-row="${i}">${avatar(x.p, x.tid, "sm")}<div class="who"><b>${esc(x.p.name)}</b><small>${esc(ab(x.tid))} ${x.side === "home" ? "vs" : "@"} ${esc(ab(x.opp))} · ${esc(when(x.m.kickoff).txt)}${x.m.xi[x.side].status === "projected" ? ` · starts ${pct(x.p.p_start)}` : " · starting"}</small></div><div class="a">${a}</div><div class="b">${b}</div></div>`;
   }
 
   // --------------------------------------------------------------- Record
