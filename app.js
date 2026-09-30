@@ -42,7 +42,7 @@
     const m = (d - Date.now()) / 60000;
     if (m <= 0) return { txt: m > -240 ? "Live · locked" : "Final", cls: "live", locked: true };
     if (m < 60) return { txt: `in ${Math.round(m)}m`, cls: "soon" };
-    if (m < 12 * 60) return { txt: `in ${Math.floor(m / 60)}h ${Math.round(m % 60)}m`, cls: "" };
+    if (m < 12 * 60) { const mm = Math.round(m); return { txt: `in ${Math.floor(mm / 60)}h ${mm % 60}m`, cls: "" }; } // never "4h 60m"
     return { txt: d.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }), cls: "" };
   }
 
@@ -292,6 +292,7 @@
     return rows.sort(by[f.sort] || by.edge);
   }
   function renderTops() {
+    if (state.league === "soccer") return; // S-020: soccer draws its own view
     const all = leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0));
     // ADR-0085: two rows - what we think hits more often than not, then price ("value") picks
     const lik = all.filter((r) => (r.p_model ?? 0) >= LIKELY).slice(0, 6), val = all.filter((r) => (r.p_model ?? 0) < LIKELY).slice(0, 6);
@@ -327,6 +328,7 @@
     state.event = state.event === b.dataset.ev ? null : b.dataset.ev; buzz(); renderProps();
   });
   function renderProps() {
+    if (state.league === "soccer") return; // S-020: soccer draws its own view
     renderSlate();
     renderTops();
     const rows = filtered();
@@ -1040,6 +1042,7 @@
   }
   const gameDate = (g) => { const k = g.kickoff_utc ? new Date(g.kickoff_utc) : g.kickoff ? new Date(String(g.kickoff).slice(0, 10) + "T12:00:00") : null; return k && !isNaN(k) ? k.toDateString() : ""; };
   function renderGames() {
+    if (state.league === "soccer") return; // S-020: soccer draws its own view
     const league = state.league, all = (league === "cfb" ? state.games.cfb_games : state.games.games) || [];
     let games = all;
     if (state.day === "today") games = games.filter((g) => gameDate(g) === localDate(0));
@@ -1602,6 +1605,7 @@
       : `<div class="empty" style="padding:14px">No graded games yet.</div>`;
   }
   function renderRecord() {
+    if (state.league === "soccer") return; // S-020: soccer draws its own view
     // NFL leans (ADR-0092) are an NFL-only rule: no tab for college, and a college view never
     // sits on it
     const leanChip = $('#recFilters [data-rec="lean"]'), nfl = state.league !== "cfb";
@@ -2372,6 +2376,7 @@
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };
     clearTimeout(seenTimer); seenTimer = setTimeout(() => { if (state.tab === "today" && !document.hidden) markSeen(); }, 5000);
+    soccerModule().then((m) => { try { if (state.tab === "today" && m.today) m.today(el); } catch (_) { /* soccer never breaks Today */ } }).catch(() => {});
   }
 
   // ---- pull to refresh (re-reads the published board; never spends credits)
@@ -2493,7 +2498,10 @@
     state.tab = tab;
     const hl = tab === "record" ? "bets" : tab;
     $$(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === hl)));
-    for (const v of TABS) $(`#${v}View`).classList.toggle("hidden", tab !== v);
+    const soc = state.league === "soccer" && SOCCER_TABS.includes(tab); // S-020
+    for (const v of TABS) $(`#${v}View`).classList.toggle("hidden", tab !== v || soc);
+    $("#soccerView").classList.toggle("hidden", !soc);
+    if (soc) soccerRender();
     $("#leagueSeg").style.visibility = ["props", "games", "record"].includes(tab) ? "visible" : "hidden";
     store.set("archer-tab", tab);
     if (tab === "slip") renderSlip();
@@ -2514,10 +2522,33 @@
   function setLeague(lg) {
     state.league = lg; store.set("archer-league", lg);
     $$("#leagueSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
+    if (lg === "soccer" || $("#soccerView").classList.contains("hidden") === false) { show(state.tab); if (lg === "soccer") return; }
     state.f.market = "all"; state.f.book = "all"; saveF();
     renderProps(); renderGames(); if (state.tab === "record") renderRecord(); if (state.gseg === "ranks") renderRankings();
   }
   $("#leagueSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-league]"); if (b) setLeague(b.dataset.league); });
+
+  // S-020: soccer's code lives in the soccer folder and loads only when needed. It draws with
+  // the same sheets, charts and chips as football through window.Archer.
+  const SOCCER_TABS = ["props", "games", "record"];
+  let soccerLoading = null;
+  function soccerModule() {
+    if (window.ArcherSoccer) return Promise.resolve(window.ArcherSoccer);
+    if (!soccerLoading) soccerLoading = new Promise((ok, no) => {
+      const sc = document.createElement("script"); sc.src = `./soccer/soccer.js?v=${Date.now()}`;
+      sc.onload = () => (window.ArcherSoccer ? ok(window.ArcherSoccer) : no(new Error("soccer module")));
+      sc.onerror = () => { soccerLoading = null; no(new Error("soccer module")); };
+      document.head.appendChild(sc);
+    });
+    return soccerLoading;
+  }
+  function soccerRender() {
+    const el = $("#soccerView");
+    if (!window.ArcherSoccer) el.innerHTML = `<div class="sk"></div><div class="sk"></div>`;
+    soccerModule().then((m) => { if (state.league === "soccer" && SOCCER_TABS.includes(state.tab)) m.render(state.tab, el); })
+      .catch(() => { el.innerHTML = `<div class="empty" style="margin-top:14px"><b>Soccer isn't published yet</b>It appears after the next soccer update.</div>`; });
+  }
+  window.Archer = { esc, pct, fmt1, odds, when, openSheet, closeSheet, statChart, ring, buzz, toast, store, show, countdown };
 
   const get = (f) => fetch(`./data/${f}?v=${Date.now()}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const assetsReady = get("assets.json").then((a) => { state.assets = a; });
