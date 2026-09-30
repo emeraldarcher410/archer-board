@@ -274,6 +274,11 @@
     if (f.mlean) rows = rows.filter(isMLean); // ADR-0057
     if (f.nlean) rows = rows.filter((r) => r.nfl_lean); // ADR-0092
     if (f.td) rows = rows.filter((r) => isTD(r) && r.side === "over"); // ADR-0062
+    // Touchdowns have their own board. In the "worth a look" list a TD row needs both reads
+    // to clear, not one: Hard Rock's TD prices are one-way, so with no other book the "books'
+    // chance" is the price itself and one read "clears" at an edge of 0 (2026-09-30: ten
+    // such rows, first-TD longshots at 2%, filled the NFL list)
+    else if (f.agree >= 1) rows = rows.filter((r) => !isTD(r) || (r.agree_count ?? 0) >= 2 || r.fav);
     if (f.market !== "all") rows = rows.filter((r) => r.market === f.market);
     if (f.book !== "all") rows = rows.filter((r) => (r.book || "hardrockbet_fl") === f.book);
     if (f.kind === "pickem") rows = rows.filter((r) => r.dfs); else if (f.kind === "book") rows = rows.filter((r) => !r.dfs);
@@ -321,9 +326,21 @@
     const lg = state.league, logo = (name) => { const id = teamId(lg, name), t = team(lg, id); return t && t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="ab">${esc(abbr(lg, id).slice(0, 4))}</span>`; };
     $("#slate").innerHTML = `<div class="slate"><div class="d">${esc(day)}</div>
       <div class="st2"><span><b>${games.length}</b>games</span><span><b>${favs}</b>top plays</span><span><b>${both}</b>worth a look</span><span><b>${live.length}</b>lines</span></div>
-      <div class="strip" id="strip">${games.map((g) => `<button class="gpill" data-ev="${esc(g.event_id)}" aria-pressed="${state.event === g.event_id}">${logo(g.away_team)}<span>@</span>${logo(g.home_team)}<span class="t2">${esc(when(g.commence_time).txt)}</span></button>`).join("")}</div></div>`;
+      <div class="strip" id="strip">${games.map((g) => `<button class="gpill" data-ev="${esc(g.event_id)}" aria-pressed="${state.event === g.event_id}">${logo(g.away_team)}<span>@</span>${logo(g.home_team)}<span class="t2">${esc(when(g.commence_time).txt)}</span></button>`).join("")}</div></div>${tdEntry(live)}`;
+  }
+  // One tap to the touchdown board from the top of the NFL props (owner, 2026-09-30: it was
+  // a chip at the end of a scrolling row, or two taps deep in Today)
+  function tdEntry(live) {
+    if (state.league !== "nfl") return "";
+    const td = live.filter((r) => r.market === "player_anytime_td" && r.side === "over" && !r.dfs && r.status !== "OUT");
+    if (!td.length) return "";
+    const top = [...td].filter((r) => r.p_matchup_raw != null && !r.market_gap).sort((a, b) => b.p_matchup_raw - a.p_matchup_raw)[0];
+    const worth = td.filter((r) => r.edge > 0 && !hold(r)).length; // the board's own count
+    const n = new Set(td.map((r) => normName(r.player_ref))).size;
+    return `<button class="tdentry" type="button" data-tdboard><span class="ic">🏈</span><span class="tx"><b>Touchdown board</b><small>${n} players priced${top ? ` · most likely ${esc(top.player_ref)} ${pct(top.p_matchup_raw)}` : ""}${worth ? ` · ${worth} worth it at Hard Rock` : ""}</small></span><span class="go">›</span></button>`;
   }
   $("#slate").addEventListener("click", (e) => {
+    if (e.target.closest("[data-tdboard]")) { buzz(); openTdBoard(); return; }
     const b = e.target.closest("[data-ev]"); if (!b) return;
     state.event = state.event === b.dataset.ev ? null : b.dataset.ev; buzz(); renderProps();
   });
@@ -2346,7 +2363,7 @@
     const opened = secs.find((x) => x.id === state.todayOpen);
     const chips = secs.length ? `<div class="tchips"><button class="tchip ${opened ? "" : "on"}" data-tile="">All</button>${secs.map((x) => `<button class="tchip ${opened && opened.id === x.id ? "on" : ""}" data-tile="${x.id}"><span>${x.icon}</span>${esc(x.title)}<b>${x.n ?? x.rows.length}</b></button>`).join("")}</div>` : "";
     const full = (x) => `<div class="tsec"><h3><span>${x.icon} ${esc(x.title)}</span></h3>${x.head || ""}${x.rows.join("")}${x.foot ? `<div class="foot" style="margin:4px 0 0">${x.foot}</div>` : ""}${x.more || ""}</div>`;
-    const preview = (x) => `<div class="tsec"><h3><span>${x.icon} ${esc(x.title)}</span>${x.rows.length > 2 ? `<button data-tile="${x.id}">See all ${x.rows.length}</button>` : ""}</h3>${x.rows.slice(0, 2).join("")}</div>`;
+    const preview = (x) => `<div class="tsec"><h3><span>${x.icon} ${esc(x.title)}</span>${x.id === "td" ? `<button data-tdboard>Board ›</button>` : x.rows.length > 2 ? `<button data-tile="${x.id}">See all ${x.rows.length}</button>` : ""}</h3>${x.rows.slice(0, 2).join("")}</div>`;
     el.innerHTML = [
       overLimit() ? `<div class="warnbar">Today's loss limit is reached. Stepping away is the +EV move.</div>` : "",
       live.length ? sec("Live now", `<div class="trow live" data-go-bets><span style="display:grid;place-items:center"><i class="dot2" style="display:block;width:12px;height:12px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite"></i></span><div><b>${live.length} bet${live.length > 1 ? "s" : ""} in play</b><small>tap to sweat them</small></div><div class="pv">›</div></div>`) : "",
@@ -2371,7 +2388,7 @@
       if (e.target.closest("[data-guide]")) { openGuide(); return; }
       const un = e.target.closest("[data-untarget]"); if (un) { try { state.targets = (await apiPost("/api/targets", { action: "remove", id: un.dataset.untarget })).targets || []; renderToday(); } catch (_) { toast("Couldn't remove it"); } return; }
       if (e.target.closest("#allMLean")) { applyPreset(PRESETS.find((p) => p.id === "mlean")); show("props"); return; }
-      if (e.target.closest("#allTD")) { openTdBoard(); return; }
+      if (e.target.closest("#allTD") || e.target.closest("[data-tdboard]")) { openTdBoard(); return; }
       if (e.target.closest("#seenAll")) { markSeen(); state.changes = new Map(); state.newCount = 0; state.seenAt = Date.now(); renderToday(); renderProps(); return; }
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };
