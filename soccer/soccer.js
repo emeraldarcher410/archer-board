@@ -173,6 +173,54 @@
       <div class="lnote">${unproven} Numbers refresh about every 5 minutes while the match is on (Sportmonks, through our server). Projections are the ones we published before kickoff.</div></div>`;
   }
 
+
+  // --------------------------------------------------------------- team matchup (S-025)
+  // Each attack against the other defence: per match, adjusted for the opponents each team
+  // faced (ridge ratings, last 12 months) or raw (last 10 league matches), with league ranks
+  // and what the ratings expect in this match. Descriptive: the prices do not use it.
+  const TPS = [["sh", "Shots", 1], ["sot", "On target", 1], ["xg", "xG", 2], ["g", "Goals", 2]];
+  const TSTYLE = [["pas", "Passes", 0], ["tkl", "Tackles", 1]];
+  const ordN = (n) => { const t = n % 100; return n + (t >= 11 && t <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" })[n % 10] || "th"); };
+  function profOf(tid, lg) {
+    const P = (S.tables && S.tables.profiles) || {}, k = String(tid);
+    if (P[lg] && P[lg].teams && P[lg].teams[k]) return { P: P[lg], lg };
+    let best = null;
+    for (const [l, v] of Object.entries(P)) if (v.teams && v.teams[k] && (!best || v.teams[k].n > best.P.teams[k].n)) best = { P: v, lg: l };
+    return best;
+  }
+  const rkChip = (rk, n) => (rk == null ? "" : `<i class="rk ${rk <= Math.ceil(n / 3) ? "g" : rk > n - Math.ceil(n / 3) ? "b" : ""}">${ordN(rk)}</i>`);
+  function expectIn(P, k, att, def, home) {
+    const f = P.fit && P.fit[k]; if (!f || f.att[String(att)] == null || f.def[String(def)] == null) return null;
+    return Math.exp(f.base + f.att[String(att)] - f.def[String(def)] + (home ? f.home : 0));
+  }
+  function teamMatchup(m) {
+    const H = profOf(m.home, m.league), Aw = profOf(m.away, m.league);
+    if (!H || !Aw) return "";
+    const adj = (S.tmode || store.get("soccer-tmode", "adj")) === "adj";
+    const h = H.P.teams[String(m.home)], a = Aw.P.teams[String(m.away)];
+    const same = H.lg === Aw.lg, P = H.P;
+    const val = (rec, side, dp) => { if (!rec) return null; const v = adj ? rec[side] : rec[side + "_raw"]; return v == null ? null : Number(v).toFixed(dp); };
+    const block = (att, atk, dfn, attHome) => {
+      const at = attHome ? H : Aw, df = attHome ? Aw : H;
+      return `<div class="tmh"><span>${logo(atk)}${esc(ab(atk))} attack</span><span class="vs">vs</span><span>${logo(dfn)}${esc(ab(dfn))} defence</span></div>
+        ${TPS.map(([k, lab, dp]) => {
+          const ra = att[0][k], rd = att[1][k]; if (!ra && !rd) return "";
+          const ex = adj && same ? expectIn(P, k, atk, dfn, attHome) : null;
+          return `<div class="tmr"><span class="l">${lab}</span><span class="v">${val(ra, "f", dp) ?? "—"}${ra ? rkChip(ra.f_rk, at.P.n_teams) : ""}<small>makes</small></span><span class="v">${val(rd, "a", dp) ?? "—"}${rd ? rkChip(rd.a_rk, df.P.n_teams) : ""}<small>allows</small></span><span class="ex">${ex == null ? "" : `${ex.toFixed(dp === 0 ? 0 : dp)}<small>this match</small>`}</span></div>`;
+        }).join("")}`;
+    };
+    const style = TSTYLE.map(([k, lab, dp]) => `<div class="tmr"><span class="l">${lab}</span><span class="v">${val(h[k], "f", dp) ?? "—"}${h[k] ? rkChip(h[k].f_rk, H.P.n_teams) : ""}<small>${esc(ab(m.home))}</small></span><span class="v">${val(a[k], "f", dp) ?? "—"}${a[k] ? rkChip(a[k].f_rk, Aw.P.n_teams) : ""}<small>${esc(ab(m.away))}</small></span><span class="ex"></span></div>`).join("");
+    // the one-line read: xG attack against xG defence, both ways
+    const read = [[m.home, h, m.away, a], [m.away, a, m.home, h]].map(([t1, r1, t2, r2]) => r1.xg && r2.xg ? `${esc(ab(t1))}'s attack (${ordN(r1.xg.f_rk)} in xG) meets ${esc(ab(t2))}'s defence (${ordN(r2.xg.a_rk)} fewest xG allowed)` : "").filter(Boolean).join("; ");
+    const lgNote = same ? "" : ` · ${esc(ab(m.home))} from ${esc(LEAGUES[H.lg] || H.lg)}, ${esc(ab(m.away))} from ${esc(LEAGUES[Aw.lg] || Aw.lg)}`;
+    return `<div class="panel" id="tmP"><h3><span>Team matchup</span><span class="seg3"><button data-tmode="adj" aria-pressed="${adj}">Adjusted</button><button data-tmode="raw" aria-pressed="${!adj}">Raw</button></span></h3>
+      ${read ? `<div class="tmread">${read}.</div>` : ""}
+      ${block([h, a], m.home, m.away, true)}
+      ${block([a, h], m.away, m.home, false)}
+      <div class="tmh"><span>Style</span></div>${style}
+      <div class="foot" style="margin:8px 0 0">${adj ? "Per match against an average opponent: each team's numbers are read against the defences and attacks it actually faced (strength of schedule), last 12 months, recent matches count more. \"This match\" = what those ratings expect here." : "Raw: average of each team's last 10 league matches, opponents not accounted for."} Ranks out of ${H.P.n_teams} (green: top third, red: bottom third; defence rank 1 = allows the fewest)${lgNote}. Context only: prices use the market and our player model.</div></div>`;
+  }
+
   // --------------------------------------------------------------- shared pieces
   function css() {
     if ($("#soccerCss")) return;
@@ -207,6 +255,13 @@
       .sq{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}.sq:first-child{border-top:0}
       .sq .who small{display:block;color:var(--ink-3);font-size:12px}
       .inj{font-size:13px;color:var(--ink-2);padding:4px 0}.inj b{color:var(--ink)}
+      .seg3{display:inline-flex;gap:2px;padding:2px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line)}.seg3 button{font:700 11px Inter,sans-serif;letter-spacing:.02em;text-transform:none;padding:3px 9px;border-radius:7px;border:0;background:transparent;color:var(--ink-3);cursor:pointer}.seg3 button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+      .tmread{font-size:13px;color:var(--ink-2);line-height:1.45;margin:0 0 6px}
+      .tmh{display:flex;align-items:center;gap:8px;margin:12px 0 2px;font:800 13px var(--display);letter-spacing:.03em;text-transform:uppercase}.tmh img{width:18px;height:18px;object-fit:contain;vertical-align:-4px;margin-right:5px}.tmh .vs{color:var(--ink-3);font:600 11px Inter,sans-serif;text-transform:none}
+      .tmr{display:grid;grid-template-columns:72px 1fr 1fr 64px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+      .tmr .l{font-size:13px;color:var(--ink-2)}.tmr .v{font:800 18px var(--display);text-align:center;white-space:nowrap}.tmr .v small{display:block;font:600 10.5px Inter,sans-serif;color:var(--ink-3)}
+      .tmr .ex{text-align:right;font:700 15px var(--display);color:var(--ink-2)}.tmr .ex small{display:block;font:600 10px Inter,sans-serif;color:var(--ink-3)}
+      .tmr .rk{font:700 10px Inter,sans-serif;font-style:normal;margin-left:5px;padding:1px 5px;border-radius:6px;background:var(--surface-2);color:var(--ink-2);vertical-align:3px}.tmr .rk.g{background:var(--accent-soft);color:var(--accent-2)}.tmr .rk.b{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
       .lpan{border-color:color-mix(in srgb,var(--red) 45%,var(--line))}.lpan.fin{border-color:var(--line)}
       .ldot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);margin-right:7px;vertical-align:1px;animation:pulse 1.2s infinite}
       .ltt{margin:2px 0 4px}.ltr{display:grid;grid-template-columns:1fr 92px 92px;gap:8px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}.ltr.h{border-top:0;padding-top:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
@@ -361,6 +416,7 @@
         <div style="margin-top:12px">${wp3(m)}</div></div>
       <div id="liveP">${livePanel(m)}</div>
       ${glance(m)}
+      ${teamMatchup(m)}
       <div class="panel"><h3><span>Starting XIs</span><span style="text-transform:none;letter-spacing:0">${m.xi.home.status === "confirmed" ? "confirmed lineups" : "projected · % = start chance"}</span></h3>${pitch(m.xi.home, m.home, m)}${pitch(m.xi.away, m.away, m)}</div>
       ${outs.length ? `<div class="panel"><h3>Out</h3>${outs.map((o) => `<div class="inj">${logo(o.tid, "")}<b>${esc(o.name || "Player " + o.pid)}</b> · ${esc(o.why || "unavailable")}${o.until ? ` · until ${esc(new Date(o.until).toLocaleDateString([], { month: "short", day: "numeric" }))}` : ""}</div>`).join("")}</div>` : ""}
       ${lines.length ? `<div class="panel"><h3><span>Prop lines</span><span>${unproven}</span></h3>${lineRows(lines.slice(0, 40))}</div>` : ""}
@@ -368,6 +424,7 @@
       ${m.venue && m.venue.name ? `<div class="foot">${esc(m.venue.name)}${m.venue.city ? ", " + esc(m.venue.city) : ""}${m.venue.capacity ? ` · capacity ${Number(m.venue.capacity).toLocaleString()}` : ""}</div>` : ""}`, true);
     liveSheet = { s, m };
     s.addEventListener("click", (e) => {
+      const tm = e.target.closest("[data-tmode]"); if (tm) { S.tmode = tm.dataset.tmode; store.set("soccer-tmode", S.tmode); buzz(); const box = $("#tmP", s); if (box) box.outerHTML = teamMatchup(m); return; }
       const pp = e.target.closest("[data-pp]"); if (pp) { openPlayer(Number(pp.dataset.pp), Number(pp.dataset.tid), m); return; }
       const t = e.target.closest("[data-team]"); if (t) openTeam(Number(t.dataset.team));
     });
