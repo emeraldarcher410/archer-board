@@ -21,7 +21,7 @@
 
   // --------------------------------------------------------------- data
   function load() {
-    if (!S.loading) S.loading = Promise.all([get("slate.json"), get("tables.json")]).then(([sl, tb]) => { S.slate = sl; S.tables = tb; });
+    if (!S.loading) S.loading = Promise.all([get("slate.json"), get("tables.json"), get("live.json")]).then(([sl, tb, lv]) => { S.slate = sl; S.tables = tb; S.live = lv; livePoll(); });
     return S.loading;
   }
   const teamFile = (id) => (S.teams[id] ? Promise.resolve(S.teams[id]) : get(`teams/${id}.json`).then((t) => (S.teams[id] = t || { players: {} })));
@@ -54,6 +54,123 @@
     const out = [];
     for (const m of ms) for (const side of ["home", "away"]) for (const p of m.xi[side].players) out.push({ p, m, side, tid: side === "home" ? m.home : m.away, opp: side === "home" ? m.away : m.home });
     return out;
+  }
+
+
+  // --------------------------------------------------------------- live (S-024)
+  // live.json: the server's in-play fetch every few minutes while a match is on. The page
+  // polls it each minute while a match is in its window and compares the game with the
+  // projections frozen at kickoff. Our picks (lines we beat a book on) and our strongest
+  // chances are pinned on top.
+  const FINAL = ["FT", "AET", "FT_PEN"];
+  const LK = { shots: "sh", sot: "sot", goal: "g", assist: "a", passes: "pas", tackles: "tkl", saves: "sav" };
+  const PK = { shots: "shots", shots_on_target: "sot", goals: "goal", assists: "assist", passes: "passes", tackles: "tackles", saves: "saves" };
+  const THRS = { shots: [1, 2, 3], sot: [1, 2], goal: [1], assist: [1], tackles: [1, 2, 3], saves: [2, 3, 4] };
+  const LAB1 = { shots: "shots", sot: "on target", goal: "goal", assist: "assist", tackles: "tackles", saves: "saves", passes: "passes" };
+  const liveOf = (m) => (S.live && S.live.matches && S.live.matches[String(m.id)]) || null;
+  const inWindow = (m) => { const t = new Date(m.kickoff) - Date.now(); return t <= 10 * 6e4 && t >= -150 * 6e4; };
+  const isLive = (m) => { const L = liveOf(m); return !!(L && L.state && L.state !== "NS" && !FINAL.includes(L.state)) || (inWindow(m) && m.score && !FINAL.includes(m.state) && m.state !== "NS"); };
+  function mState(m) {
+    const L = liveOf(m);
+    return L && L.state ? { state: L.state, state_name: L.state_name, score: L.score || m.score } : { state: m.state, state_name: m.state_name, score: m.score };
+  }
+  let liveTimer = null, liveSheet = null;
+  function livePoll() {
+    if (liveTimer) return;
+    liveTimer = setInterval(async () => {
+      if (document.hidden || !S.slate || !S.slate.matches.some(inWindow)) return;
+      const d = await get("live.json");
+      if (!d || (S.live && d.as_of === S.live.as_of)) return;
+      S.live = d;
+      refreshLive();
+    }, 60000);
+  }
+  function refreshLive() {
+    if (liveSheet && document.body.contains(liveSheet.s)) {
+      const { s, m } = liveSheet, ms = mState(m), fin = FINAL.includes(ms.state);
+      const box = $("#liveP", s); if (box) box.innerHTML = livePanel(m);
+      if (ms.score) { $("#lsH", s).textContent = ms.score[0]; $("#lsA", s).textContent = ms.score[1]; $("#lsM", s).textContent = fin ? "full time" : ms.state_name || "live"; }
+    }
+    if (S.el && document.body.contains(S.el) && S.tab === "games" && S.seg === "games") renderGames(S.el);
+  }
+  const agoTxt = (t) => { const mn = Math.max(0, Math.round((Date.now() - new Date(t)) / 6e4)); return mn < 1 ? "just now" : `${mn} min ago`; };
+  function pickStatus(v, line, side, fin) {
+    if (v == null) return { cls: "", t: "no number yet" };
+    if (side === "over") {
+      if (v > line) return { cls: "won", t: "✓ hit" };
+      const need = Math.floor(line) + 1 - v;
+      return fin ? { cls: "lost", t: "✗ missed" } : { cls: "", t: `needs ${need} more` };
+    }
+    if (v > line) return { cls: "lost", t: "✗ past the line" };
+    const room = Math.floor(line) - v;
+    return fin ? { cls: "won", t: "✓ hit" } : { cls: "", t: room > 0 ? `${room} to spare` : "at the limit" };
+  }
+  function livePanel(m) {
+    const L = liveOf(m);
+    if (!L || !L.state || L.state === "NS") return "";
+    const fin = FINAL.includes(L.state), edgeMin = S.slate.edge_min || 0.04;
+    const xi = { home: m.xi.home.players, away: m.xi.away.players };
+    const byPid = {}; for (const side of ["home", "away"]) for (const p of xi[side]) byPid[String(p.pid)] = { p, side, tid: side === "home" ? m.home : m.away };
+    const lv = (pid) => (L.players || {})[String(pid)] || null;
+    // team numbers against the frozen projection (sum of the XI's projections)
+    const projSum = (side, k) => { let t = 0, any = false; for (const p of xi[side]) { const e = p.proj && p.proj[k]; if (e) { t += e.m; any = true; } } return any ? t : null; };
+    const trow = (lab, lk, pk, dig) => {
+      const cell = (side, i) => { const v = (L.teams[side] || {})[lk]; const pr = pk ? projSum(side, pk) : m.proj.xg[i]; return `<span>${v == null ? "—" : dig ? Number(v).toFixed(2) : Math.round(v)}<small>${pr == null ? "" : ` / ${dig ? pr.toFixed(2) : fmt1(pr)}`}</small></span>`; };
+      return `<div class="ltr"><span class="l">${lab}</span>${cell("home", 0)}${cell("away", 1)}</div>`;
+    };
+    const teams = L.has_stats ? `<div class="ltt"><div class="ltr h"><span></span><span>${esc(ab(m.home))}</span><span>${esc(ab(m.away))}</span></div>${trow("Shots", "sh", "shots")}${trow("On target", "sot", "sot")}${trow("xG", "xg", null, true)}${trow("Tackles", "tkl", "tackles")}</div><div class="lnote">live / our full-match projection</div>` : `<div class="lnote">Player numbers arrive as Sportmonks posts them; the score updates first.</div>`;
+    // ★ our picks: the lines we beat a book on, frozen at kickoff
+    const picks = [];
+    for (const side of ["home", "away"]) for (const p of xi[side]) for (const l of p.lines || []) if (l.best && l.best.edge >= edgeMin) picks.push({ p, l, tid: side === "home" ? m.home : m.away });
+    const pickRows = picks.map(({ p, l, tid }) => {
+      const side = l.best.side === "under" ? "under" : "over", k = LK[PK[l.prop]], v = (lv(p.pid) || {})[k];
+      const st = pickStatus(v, l.line, side, fin);
+      const lab = l.prop === "goals" ? (side === "over" ? "to score" : "no goal") : `${side === "over" ? "over" : "under"} ${l.line} ${(PROP[l.prop] || l.prop).toLowerCase()}`;
+      return `<div class="lpk ${st.cls}" data-pp="${p.pid}" data-tid="${tid}">${avatar(p, tid, "sm")}<div class="who"><b>★ ${esc(p.short || p.name)}</b><small>${esc(lab)} · ${esc(BOOK[l.best.book] || l.best.book || "")} · +${(l.best.edge * 100).toFixed(1)} pts</small></div><div class="lv"><b>${v ?? "—"}</b><small>${esc(st.t)}</small></div></div>`;
+    }).join("");
+    // our strongest chances: per player and prop, the highest threshold we gave 60%+
+    const ch = [];
+    for (const side of ["home", "away"]) for (const p of xi[side]) {
+      if (!p.proj) continue;
+      for (const [k, ks] of Object.entries(THRS)) {
+        const e = p.proj[k]; if (!e || !e.p) continue;
+        let best = null; ks.forEach((n, i) => { if (e.p[i] != null && e.p[i] >= 0.6) best = { n, prob: e.p[i] }; });
+        if (best) ch.push({ p, k, ...best, tid: side === "home" ? m.home : m.away });
+      }
+    }
+    ch.sort((a, b) => b.prob - a.prob);
+    const chRows = ch.slice(0, 8).map((c) => {
+      const v = (lv(c.p.pid) || {})[LK[c.k]], done = v != null && v >= c.n, lost = fin && !done;
+      const lab = c.k === "goal" ? "to score" : c.k === "assist" ? "to assist" : `${c.n}+ ${LAB1[c.k]}`;
+      return `<div class="lpk ${done ? "won" : lost ? "lost" : ""}" data-pp="${c.p.pid}" data-tid="${c.tid}">${avatar(c.p, c.tid, "sm")}<div class="who"><b>${esc(c.p.short || c.p.name)}</b><small>${esc(lab)} · ours ${pct(c.prob)}</small></div><div class="lv"><b>${v ?? "—"}<small style="display:inline;font-size:13px"> / ${c.n}</small></b><small>${done ? "✓ done" : lost ? "✗ missed" : v == null ? "no number yet" : `${c.n - v} to go`}</small></div></div>`;
+    }).join("");
+    // every player who has played: live against projection; green when ahead of pace
+    const played = Object.entries(L.players || {}).filter(([, r]) => r.min || r.st);
+    const cols = [["Sh", "sh", "shots"], ["SoT", "sot", "sot"], ["G", "g", null], ["A", "a", null], ["Pas", "pas", "passes"], ["Tkl", "tkl", "tackles"]];
+    const trk = (side) => played.filter(([, r]) => r.side === side).sort((a, b) => (b[1].st ? 1 : 0) - (a[1].st ? 1 : 0) || (b[1].min || 0) - (a[1].min || 0)).map(([pid, r]) => {
+      const x = byPid[pid], pr = x && x.p.proj, pm = pr && pr.min ? pr.min : 85, frac = Math.min(1, (r.min || 0) / pm);
+      const isPick = picks.some((q) => String(q.p.pid) === pid);
+      const cells = cols.map(([, lk, pk]) => {
+        const v = r[lk], e = pk && pr && pr[pk];
+        const ahead = e && v != null && r.min && v >= e.m * frac + 0.5 && v > 0;
+        return `<td class="${ahead ? "up" : ""}">${v ?? "—"}${e ? `<small>${pk === "passes" ? Math.round(e.m) : fmt1(e.m)}</small>` : ""}</td>`;
+      }).join("");
+      const tid = side === "home" ? m.home : m.away, who = esc(surname((x && (x.p.short || x.p.name)) || r.name || pid));
+      if ((pr && pr.saves) || (x && x.p.pos === "GK")) { // keepers: saves against projection
+        const e = pr && pr.saves;
+        return `<tr class="plrow" data-pp="${pid}" data-tid="${tid}"><td>${who} <small style="display:inline;color:var(--ink-3)">GK</small></td><td>${r.min ?? "—"}</td><td colspan="6" style="text-align:left">${r.sav ?? 0} saves${e ? ` <small style="display:inline">· proj ${fmt1(e.m)}</small>` : ""}</td></tr>`;
+      }
+      return `<tr class="plrow ${isPick ? "pick" : ""}" data-pp="${pid}" data-tid="${tid}"><td>${isPick ? "★ " : ""}${who}</td><td>${r.min ?? "—"}</td>${cells}</tr>`;
+    }).join("");
+    const tracker = L.has_stats && played.length ? `<table class="pl ltk"><thead><tr><th>Player</th><th>Min</th>${cols.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>
+      <tr class="tsep"><td colspan="8">${logo(m.home)}${esc(nm(m.home))}</td></tr>${trk("home")}<tr class="tsep"><td colspan="8">${logo(m.away)}${esc(nm(m.away))}</td></tr>${trk("away")}</tbody></table>
+      <div class="lnote">Small number: our full-match projection. Green: ahead of the pace that projection needs for his minutes so far.</div>` : "";
+    return `<div class="panel lpan ${fin ? "fin" : ""}"><h3><span>${fin ? "Final vs our numbers" : `<i class="ldot"></i>Live vs our numbers`}</span><span style="text-transform:none;letter-spacing:0">${esc(L.state_name || "")} · ${fin ? "final" : "updated " + agoTxt(L.t)}</span></h3>
+      ${teams}
+      ${pickRows ? `<div class="lsec">★ Our picks <span>lines we beat a book on, as they stood at kickoff</span></div>${pickRows}` : ""}
+      ${chRows ? `<div class="lsec">Our strongest calls <span>the chances we rated highest</span></div>${chRows}` : ""}
+      ${tracker ? `<div class="lsec">Every player</div>${tracker}` : ""}
+      <div class="lnote">${unproven} Numbers refresh about every 5 minutes while the match is on (Sportmonks, through our server). Projections are the ones we published before kickoff.</div></div>`;
   }
 
   // --------------------------------------------------------------- shared pieces
@@ -90,6 +207,19 @@
       .sq{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}.sq:first-child{border-top:0}
       .sq .who small{display:block;color:var(--ink-3);font-size:12px}
       .inj{font-size:13px;color:var(--ink-2);padding:4px 0}.inj b{color:var(--ink)}
+      .lpan{border-color:color-mix(in srgb,var(--red) 45%,var(--line))}.lpan.fin{border-color:var(--line)}
+      .ldot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);margin-right:7px;vertical-align:1px;animation:pulse 1.2s infinite}
+      .ltt{margin:2px 0 4px}.ltr{display:grid;grid-template-columns:1fr 92px 92px;gap:8px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}.ltr.h{border-top:0;padding-top:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+      .ltr span{text-align:center}.ltr .l{text-align:left;color:var(--ink-2);font-size:13px}.ltr span:not(.l){font:800 19px var(--display)}.ltr small{font:600 12px Inter,sans-serif;color:var(--ink-3)}.ltr.h span{font:inherit}
+      .lnote{font-size:11.5px;color:var(--ink-3);margin:4px 0 2px;line-height:1.45}
+      .lsec{margin:14px 0 2px;font:800 15px var(--display);letter-spacing:.02em;text-transform:uppercase}.lsec span{font:500 11.5px Inter,sans-serif;text-transform:none;letter-spacing:0;color:var(--ink-3);margin-left:6px}
+      .lpk{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 8px;margin:6px 0 0;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);cursor:pointer}
+      .lpk .who{min-width:0}.lpk .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lpk .who small{display:block;color:var(--ink-3);font-size:12px}
+      .lpk .lv{text-align:right}.lpk .lv b{display:block;font:800 22px var(--display);font-variant-numeric:tabular-nums}.lpk .lv small{display:block;font-size:11.5px;font-weight:700;color:var(--ink-2)}
+      .lpk.won{border-color:color-mix(in srgb,var(--accent) 60%,var(--line));background:var(--accent-soft)}.lpk.won .lv small{color:var(--accent-2)}
+      .lpk.lost{opacity:.7}.lpk.lost .lv small{color:var(--red)}
+      .ltk td small{display:block;font-size:10px;color:var(--ink-3);font-weight:600}.ltk td.up{color:var(--accent-2);font-weight:800}.ltk tr.pick td:first-child{color:var(--accent-2);font-weight:700}
+      .ltk .tsep td{padding-top:10px;font-weight:800;text-align:left;color:var(--ink-2)}.ltk .tsep img{width:16px;height:16px;vertical-align:-3px;margin-right:6px}
       .prow2{display:grid;grid-template-columns:auto 1fr 58px 64px;gap:10px;align-items:center;padding:10px 2px;border-top:1px solid var(--line);cursor:pointer}.prow2:nth-child(2){border-top:0}
       .prow2 .who{min-width:0}.prow2 .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow2 .who small{display:block;color:var(--ink-3);font-size:12px;line-height:1.35}
       .prow2 .a{text-align:center;font:800 24px var(--display);font-variant-numeric:tabular-nums}.prow2 .b{text-align:center;font:700 16px var(--display);color:var(--ink-2);font-variant-numeric:tabular-nums}
@@ -115,8 +245,9 @@
     const lg = T(id).logo ? `<img src="${esc(T(id).logo)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="fb">${esc(ab(id))}</span>`;
     return `<div class="side ${cls}" style="background:linear-gradient(${cls === "h" ? "250deg" : "110deg"}, ${esc(c)}, color-mix(in srgb, ${esc(c)} 55%, #070B12))">${lg}<div class="nm3 ${sz}">${esc(n)}<small>${esc(ab(id))}</small></div></div>`;
   }
-  function scoreMid(m) {
-    const fin = m.score && ["FT", "AET", "FT_PEN"].includes(m.state), live = m.score && !fin && m.state !== "NS";
+  function scoreMid(m0) {
+    const m = { ...m0, ...mState(m0) };
+    const fin = m.score && FINAL.includes(m.state), live = m.score && !fin && m.state !== "NS";
     if (m.score && (fin || live)) return `<div class="sc2"><span style="margin:0;color:inherit">${m.score[0]}</span><span>–</span><span style="margin:0;color:inherit">${m.score[1]}</span></div><div class="lbl3" style="${live ? "color:var(--red)" : ""}">${esc(live ? m.state_name || "live" : "full time")}</div>`;
     const x = m.proj.xg, hi = x[0] >= x[1];
     return `<div class="sc2"><span class="${hi ? "" : "lo"}" style="margin:0;color:inherit">${fmt1(x[0])}</span><span>–</span><span class="${hi ? "lo" : ""}" style="margin:0;color:inherit">${fmt1(x[1])}</span></div><div class="lbl3">projected goals</div>`;
@@ -221,19 +352,21 @@
     lines.sort((a, b) => ((b.l.best || {}).edge ?? -1) - ((a.l.best || {}).edge ?? -1));
     const big = (id) => (T(id).logo ? `<img src="${esc(T(id).logo)}" alt="" onerror="this.remove()">` : `<span class="fb" style="--tc:${esc(col(id))}">${esc(ab(id))}</span>`);
     const outs = ["home", "away"].flatMap((s) => (m.out[s] || []).map((o) => ({ ...o, tid: s === "home" ? m.home : m.away })));
-    const fin = m.score && ["FT", "AET", "FT_PEN"].includes(m.state);
+    const ms = mState(m), fin = ms.score && FINAL.includes(ms.state);
     const s = openSheet(`<div class="sh-top"><button class="btn small" data-close>✕ Close</button><span class="when ${w.cls}" style="font-size:13px">${esc(w.txt)} · ${esc(SHORT[m.league] || m.league)}</span></div>
       <div class="ghero" style="--ca:${esc(col(m.home))};--ch:${esc(col(m.away))}">
-        <div class="vs"><div data-team="${m.home}" style="cursor:pointer">${big(m.home)}<div class="tnm">${esc(nm(m.home))}</div><div class="sc">${m.score ? m.score[0] : fmt1(m.proj.xg[0])}</div></div>
-          <div class="mid2">${m.score ? (fin ? "full time" : esc(m.state_name || "live")) : "projected goals"}</div>
-          <div data-team="${m.away}" style="cursor:pointer">${big(m.away)}<div class="tnm">${esc(nm(m.away))}</div><div class="sc">${m.score ? m.score[1] : fmt1(m.proj.xg[1])}</div></div></div>
+        <div class="vs"><div data-team="${m.home}" style="cursor:pointer">${big(m.home)}<div class="tnm">${esc(nm(m.home))}</div><div class="sc" id="lsH">${ms.score ? ms.score[0] : fmt1(m.proj.xg[0])}</div></div>
+          <div class="mid2" id="lsM">${ms.score ? (fin ? "full time" : esc(ms.state_name || "live")) : "projected goals"}</div>
+          <div data-team="${m.away}" style="cursor:pointer">${big(m.away)}<div class="tnm">${esc(nm(m.away))}</div><div class="sc" id="lsA">${ms.score ? ms.score[1] : fmt1(m.proj.xg[1])}</div></div></div>
         <div style="margin-top:12px">${wp3(m)}</div></div>
+      <div id="liveP">${livePanel(m)}</div>
       ${glance(m)}
       <div class="panel"><h3><span>Starting XIs</span><span style="text-transform:none;letter-spacing:0">${m.xi.home.status === "confirmed" ? "confirmed lineups" : "projected · % = start chance"}</span></h3>${pitch(m.xi.home, m.home, m)}${pitch(m.xi.away, m.away, m)}</div>
       ${outs.length ? `<div class="panel"><h3>Out</h3>${outs.map((o) => `<div class="inj">${logo(o.tid, "")}<b>${esc(o.name || "Player " + o.pid)}</b> · ${esc(o.why || "unavailable")}${o.until ? ` · until ${esc(new Date(o.until).toLocaleDateString([], { month: "short", day: "numeric" }))}` : ""}</div>`).join("")}</div>` : ""}
       ${lines.length ? `<div class="panel"><h3><span>Prop lines</span><span>${unproven}</span></h3>${lineRows(lines.slice(0, 40))}</div>` : ""}
       <div class="panel"><h3><span>Player projections</span><span style="text-transform:none;letter-spacing:0">if he starts · tap a player</span></h3>${projTable(m, "home")}${projTable(m, "away")}</div>
       ${m.venue && m.venue.name ? `<div class="foot">${esc(m.venue.name)}${m.venue.city ? ", " + esc(m.venue.city) : ""}${m.venue.capacity ? ` · capacity ${Number(m.venue.capacity).toLocaleString()}` : ""}</div>` : ""}`, true);
+    liveSheet = { s, m };
     s.addEventListener("click", (e) => {
       const pp = e.target.closest("[data-pp]"); if (pp) { openPlayer(Number(pp.dataset.pp), Number(pp.dataset.tid), m); return; }
       const t = e.target.closest("[data-team]"); if (t) openTeam(Number(t.dataset.team));
@@ -493,12 +626,13 @@
     if (!S.slate) { load().then(() => { if (S.slate && document.body.contains(el)) today(el); }); return; }
     if ($("#soccerToday", el)) $("#soccerToday", el).remove();
     const t0 = new Date(); t0.setHours(0, 0, 0, 0);
-    const ms = S.slate.matches.filter((m) => { const d = new Date(m.kickoff); return d >= t0 && d - t0 < 864e5 && upcoming(m); });
+    const ms = S.slate.matches.filter((m) => { const d = new Date(m.kickoff); return (d >= t0 && d - t0 < 864e5 && upcoming(m)) || isLive(m); })
+      .sort((a, b) => (isLive(b) ? 1 : 0) - (isLive(a) ? 1 : 0) || String(a.kickoff).localeCompare(String(b.kickoff)));
     if (!ms.length) return;
     css();
     const box = document.createElement("div"); box.id = "soccerToday"; box.className = "tsec";
     box.innerHTML = `<h3><span>⚽ Soccer today · testing</span><button type="button" data-sgo>All matches ›</button></h3>
-      ${ms.slice(0, 6).map((m, i) => `<div class="trow" data-stm="${i}" style="cursor:pointer;padding:6px 0">${logoBox(m.home)}<div class="tn">${esc(nm(m.home))} v ${esc(nm(m.away))}<small>${esc(SHORT[m.league] || "")} · ${esc(when(m.kickoff).txt)} · ${esc(ab(m.home))} ${pct(m.proj.p[0])} · draw ${pct(m.proj.p[1])} · ${esc(ab(m.away))} ${pct(m.proj.p[2])}</small></div><div class="pts" style="font-size:20px">${fmt1(m.proj.xg[0])}–${fmt1(m.proj.xg[1])}</div></div>`).join("")}`;
+      ${ms.slice(0, 6).map((m, i) => `<div class="trow" data-stm="${i}" style="cursor:pointer;padding:6px 0">${logoBox(m.home)}<div class="tn">${esc(nm(m.home))} v ${esc(nm(m.away))}<small>${esc(SHORT[m.league] || "")} · ${esc(when(m.kickoff).txt)} · ${esc(ab(m.home))} ${pct(m.proj.p[0])} · draw ${pct(m.proj.p[1])} · ${esc(ab(m.away))} ${pct(m.proj.p[2])}</small></div>${isLive(m) && mState(m).score ? `<div class="pts" style="font-size:20px;color:var(--red)">${mState(m).score[0]}–${mState(m).score[1]}<small style="display:block;font-size:10px;text-align:right">● ${esc(mState(m).state_name || "live")}</small></div>` : `<div class="pts" style="font-size:20px">${fmt1(m.proj.xg[0])}–${fmt1(m.proj.xg[1])}</div>`}</div>`).join("")}`;
     el.appendChild(box);
     box.onclick = (e) => {
       if (e.target.closest("[data-sgo]")) { const b = document.querySelector('#leagueSeg [data-league="soccer"]'); if (b) b.click(); A.show("games"); return; }
@@ -509,6 +643,7 @@
   // --------------------------------------------------------------- entry
   function render(tab, el) {
     css();
+    S.el = el; S.tab = tab;
     if (!S.slate) {
       el.innerHTML = `<div class="sk"></div><div class="sk"></div>`;
       load().then(() => (S.slate ? render(tab, el) : (el.innerHTML = `<div class="empty" style="margin-top:14px"><b>No soccer data yet</b>It publishes with the next soccer update.</div>`)));
