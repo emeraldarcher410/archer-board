@@ -209,6 +209,7 @@
         </div>
         <div class="row2"><div class="subrow" style="margin-top:0">${bookPill(r, be)}${edge}${tags}</div>
           <div style="display:flex;align-items:center;gap:10px">${spark(r)}<button class="quick ${inSlip(r) ? "on" : ""}" data-quick="${i}" aria-label="Add to slip">${inSlip(r) ? "✓" : "+"}</button></div></div>
+        ${alsoRow(r)}
       </div></div>`;
   }
 
@@ -272,7 +273,7 @@
     if (!f.started) rows = rows.filter((r) => !when(r.commence_time).locked);
     if (!f.lowvol) rows = rows.filter((r) => !r.volume || r.low_ok); // ADR-0048/0050: backups' props unless the market backs them
     if (f.mlean) rows = rows.filter(isMLean); // ADR-0057
-    if (f.nlean) rows = rows.filter((r) => r.nfl_lean); // ADR-0092
+    if (f.nlean && state.league === "nfl") rows = rows.filter((r) => r.nfl_lean); // ADR-0092 (NFL only)
     if (f.td) rows = rows.filter((r) => isTD(r) && r.side === "over"); // ADR-0062
     // Touchdowns have their own board. In the "worth a look" list a TD row needs both reads
     // to clear, not one: Hard Rock's TD prices are one-way, so with no other book the "books'
@@ -298,7 +299,7 @@
   }
   function renderTops() {
     if (state.league === "soccer") return; // S-020: soccer draws its own view
-    const all = leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0));
+    const all = groupRows(leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)));
     // ADR-0085: two rows - what we think hits more often than not, then price ("value") picks
     const lik = all.filter((r) => (r.p_model ?? 0) >= LIKELY).slice(0, 6), val = all.filter((r) => (r.p_model ?? 0) < LIKELY).slice(0, 6);
     const favs = [...lik, ...val];
@@ -307,7 +308,7 @@
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
         <div class="who2">${avatar(r.player_ref, lg, r.form_team, "sm")}<div class="who"><div class="nm">${esc(r.player_ref)}</div><div class="ctx">${ctxLine(r)}</div></div></div>
         <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}<small class="probl">${isTD(r) ? "to score" : "to hit"}</small></span></div>
-        <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}</div></div>`;
+        <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}${r._also && r._also.length ? ` · also ${r._also.map((x) => esc(bookName(x.book))).join(", ")}` : ""}</div></div>`;
     };
     const row = (title, sub, rows, off) => (rows.length ? `<div class="tops-h">${title} <small>${sub}</small></div><div class="tops">${rows.map((r, k) => card1(r, off + k)).join("")}</div>` : "");
     // ADR-0089: NFL chances follow the market until weekly grading earns the reads their weight
@@ -348,13 +349,37 @@
     const b = e.target.closest("[data-ev]"); if (!b) return;
     state.event = state.event === b.dataset.ev ? null : b.dataset.ev; buzz(); renderProps();
   });
+  // One card per prop (owner, 2026-10-01: "Malachi Fields u2.5" showed once per app). Rows
+  // for the same player, game, stat and side - any book, any line - fold into the
+  // best-ranked one; the others ride along as "also on" chips that open their own sheet.
+  let alsoRows = [];
+  const propKey = (r) => [r.event_id, normName(r.player_ref), r.market, r.side].join("|");
+  function groupRows(rows, pool) {
+    const by = new Map(), out = [];
+    for (const r of rows) {
+      const k = propKey(r), first = by.get(k);
+      if (!first) { const c = { ...r, _also: [] }; by.set(k, c); out.push(c); } else first._also.push(r);
+    }
+    if (pool) { // every book's line for the prop, listed or not (a Pass at Hard Rock is context)
+      const all = new Map();
+      for (const r of pool) { const k = propKey(r); if (by.has(k)) (all.get(k) || all.set(k, []).get(k)).push(r); }
+      for (const c of out) c._also = (all.get(propKey(c)) || []).filter((x) => rowKey(x) !== rowKey(c));
+    }
+    return out;
+  }
+  function alsoRow(r) {
+    if (!r._also || !r._also.length) return "";
+    return `<div class="also"><span class="lab">Also on</span>${r._also.map((x) => { const i = alsoRows.push(x) - 1, be = x.breakeven_p ?? 0.524, ok = (x.p_model ?? 0) >= be;
+      return `<button class="alsoc ${ok ? "ok" : ""}" data-also="${i}" type="button"><b>${esc(bookName(x.book))}</b> ${isTD(x) ? "" : `${x.side === "over" ? "o" : "u"}${x.line}`}${x.dfs ? "" : ` ${odds(x.price)}`} · ${pct(x.p_model)}<small> / ${pct(be)}</small></button>`; }).join("")}</div>`;
+  }
   function renderProps() {
     if (state.league === "soccer") return; // S-020: soccer draws its own view
     renderSlate();
     renderTops();
-    const rows = filtered();
+    const rows = groupRows(filtered(), listRows().filter((r) => !when(r.commence_time).locked));
+    alsoRows = [];
     shown = rows.slice(0, 200);
-    const total = listRows().length;
+    const total = groupRows(listRows()).length;
     $("#count").textContent = `${rows.length} of ${total}`;
     $("#count2").textContent = rows.length > 200 ? "Showing the top 200" : "";
     const nh = [...state.hidden].length;
@@ -378,9 +403,12 @@
   const sameF = (a, b) => Object.keys(F0).every((k) => String(a[k] ?? F0[k]) === String(b[k] ?? F0[k]));
   function renderPresets() {
     const el = $("#presets"); if (!el) return;
-    const mine = savedPresets(), on = (p) => (!p.league || p.league === state.league) && sameF(state.f, p.f);
-    el.innerHTML = PRESETS.map((p) => `<button class="chip" data-preset="${p.id}" aria-pressed="${on(p)}">${esc(p.name)}</button>`).join("")
-      + mine.map((p, i) => `<button class="chip" data-mine="${i}" aria-pressed="${on(p)}">${esc(p.name)}<span data-unsave="${i}" aria-label="Delete" style="margin-left:4px;opacity:.6">✕</span></button>`).join("")
+    // only this league's views (owner, 2026-10-01: "NFL leans" showed on the college tab);
+    // views that apply to both leagues have no league and show on both
+    const here = (p) => !p.league || p.league === state.league;
+    const mine = savedPresets(), on = (p) => here(p) && sameF(state.f, p.f);
+    el.innerHTML = PRESETS.filter(here).map((p) => `<button class="chip" data-preset="${p.id}" aria-pressed="${on(p)}">${esc(p.name)}</button>`).join("")
+      + mine.map((p, i) => (here(p) ? `<button class="chip" data-mine="${i}" aria-pressed="${on(p)}">${esc(p.name)}<span data-unsave="${i}" aria-label="Delete" style="margin-left:4px;opacity:.6">✕</span></button>` : "")).join("")
       + `<button class="chip" data-savepreset>＋ Save view</button>`;
   }
   function applyPreset(p) { if (p.id === "td") { openTdBoard(); return; } state.f = { ...F0, ...p.f }; saveF(); if (p.league && p.league !== state.league) { const keep = state.f; setLeague(p.league); state.f = keep; saveF(); } renderProps(); }
@@ -403,7 +431,7 @@
     if (f.started) out.push(["started", "Incl. started"]);
     if (f.lowvol) out.push(["lowvol", "Incl. low volume"]);
     if (f.mlean) out.push(["mlean", "Matchup leans"]);
-    if (f.nlean) out.push(["nlean", "NFL leans · unproven"]);
+    if (f.nlean && state.league === "nfl") out.push(["nlean", "NFL leans · unproven"]);
     if (f.pick === "likely" || f.pick === "value") out.push(["pick", f.pick === "likely" ? "Likely picks" : "Value picks"]);
     if (f.td) out.push(["td", "Touchdowns"]);
     if (f.sort !== "edge") out.push(["sort", f.sort === "kick" ? "Sort: kickoff" : f.sort === "matchup" ? "Sort: best matchup" : "Sort: A–Z"]);
@@ -456,6 +484,8 @@
 
   // list interactions: tap, quick add, swipe
   $("#list").addEventListener("click", (e) => {
+    const al = e.target.closest("[data-also]");
+    if (al) { e.stopPropagation(); openPlayer(alsoRows[Number(al.dataset.also)]); return; }
     const q = e.target.closest("[data-quick]");
     if (q) { e.stopPropagation(); toggleLeg(propLeg(shown[Number(q.dataset.quick)])); renderProps(); return; }
     const sw = e.target.closest(".swipe");
