@@ -310,9 +310,13 @@
         <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}</div></div>`;
     };
     const row = (title, sub, rows, off) => (rows.length ? `<div class="tops-h">${title} <small>${sub}</small></div><div class="tops">${rows.map((r, k) => card1(r, off + k)).join("")}</div>` : "");
-    $("#tops").innerHTML = favs.length
+    // ADR-0089: NFL chances follow the market until weekly grading earns the reads their weight
+    // back, so an empty NFL list is the rule working, said so (owner, 2026-10-01)
+    const nflPaused = state.league === "nfl" && !leagueRows().some((r) => !r.dfs && (r.agree_count ?? 0) >= 2 && !isTD(r));
+    $("#tops").innerHTML = (favs.length
       ? row("Likely to hit", "we give these 50%+", lik, 0) + row("Value at the price", "under 50%, but the price pays more than it needs", val, lik.length)
-      : `<div class="tops"><div class="top empty2">No top plays right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div></div>`;
+      : `<div class="tops"><div class="top empty2">No top plays right now. The rule is strict by design: both projections must clear by 3+ points with no injury tag. Browse the full board below.</div></div>`)
+      + (nflPaused ? `<div class="note-card" style="margin-top:8px"><b>NFL "both clear" is paused.</b> The weekly grading found our NFL reads did not beat the line in weeks 2–3, so NFL chances follow the market's fair price, and Hard Rock's margin keeps them under the price. They come back by themselves when a Tuesday grading shows the reads holding up. Meanwhile: <button class="btn small" type="button" data-nlean style="margin-top:6px">NFL leans · unproven ›</button></div>` : "");
     state.topRows = favs;
   }
   function renderSlate() {
@@ -415,7 +419,10 @@
   });
   $("#unhide").addEventListener("click", () => { state.hidden.clear(); store.set("archer-hidden", { asOf: state.asOf, keys: [] }); renderProps(); });
   $("#q").addEventListener("input", (e) => { state.q = e.target.value; renderProps(); });
-  $("#tops").addEventListener("click", (e) => { const c = e.target.closest("[data-top]"); if (c) openPlayer(state.topRows[Number(c.dataset.top)]); });
+  $("#tops").addEventListener("click", (e) => {
+    if (e.target.closest("[data-nlean]")) { applyPreset(PRESETS.find((x) => x.id === "nlean")); buzz(); $("#presets").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+    const c = e.target.closest("[data-top]"); if (c) openPlayer(state.topRows[Number(c.dataset.top)]);
+  });
 
   // filter sheet
   $("#filterBtn").addEventListener("click", () => {
@@ -1015,7 +1022,7 @@
         <div class="mid3">${m ? `<div class="sc2"><span class="${hi ? "lo" : ""}" style="margin:0;color:inherit">${fmt1(m.away)}</span><span>–</span><span class="${hi ? "" : "lo"}" style="margin:0;color:inherit">${fmt1(m.home)}</span></div><div class="lbl3">model score</div>` : `<div class="lbl3">no model</div>`}</div>
         ${sbSide(league, g.home, "h")}</div>
       <div class="gbody">
-        <div class="gtop">${countdown(g.kickoff_utc)}<span class="mk">${esc(market)}${g.week ? " · Wk " + g.week : ""}</span></div>
+        <div class="gtop">${gLiveWindow(g) ? `<span class="cd live">Live · tap for our numbers</span>` : countdown(g.kickoff_utc || g.kick_iso)}<span class="mk">${esc(market)}${g.week ? " · Wk " + g.week : ""}</span></div>
         <div style="margin-top:10px">${wpBar(g, league)}</div>${linesGrid(g, league)}
         ${matchupReadHtml(g, league, false)}
         ${(g.mismatches || []).length ? `<div class="mism"><span class="h">PFF unit matchups · context</span>${g.mismatches.slice(0, 2).map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>` : ""}
@@ -1138,6 +1145,93 @@
     edges.forEach(({ b, r }) => { const offEdge = b.good_for === "off" ? r > 1 : r < 1; pts.push({ good: null, t: `${abbr(league, offEdge ? b.off : b.def)} edge: ${String(b.label || b.unit).replace(new RegExp(`\\b(${[b.off, b.def].map((x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g"), (x) => abbr(league, x))}` }); });
     return `<div class="panel glance"><div class="gh">${head}</div>${pts.map((f) => `<div class="gf ${f.good === true ? "up" : f.good === false ? "dn" : "nt"}"><i>${f.good === true ? "✓" : f.good === false ? "⚠" : "•"}</i><span>${esc(f.t)}</span></div>`).join("")}<div class="foot" style="margin:6px 0 0">Game scores are information only: the model has no proven edge on spreads or totals.</div></div>`;
   }
+
+  // ADR-0101: a live game against our numbers. ESPN's box score straight from the phone (as
+  // sweat mode reads it, ADR-0047), every 45 s while the page is open; the projections are the
+  // ones frozen at kickoff (games.json) and the picks are the board's last pre-kickoff rows
+  // (history.json once the board has dropped the started game).
+  const gKick = (g) => Date.parse(g.kick_iso || g.kickoff_utc || "") || null;
+  const gLiveWindow = (g) => { const k = gKick(g); return !!k && Date.now() >= k - 10 * 6e4 && Date.now() <= k + 5 * 36e5; };
+  function gameNames(g, league) {
+    const rs = gameRows(g, league);
+    if (rs.length) return { away: rs[0].away_team, home: rs[0].home_team };
+    const ta = team(league, g.away), th = team(league, g.home);
+    return { away: (ta && ta.name) || g.away, home: (th && th.name) || g.home };
+  }
+  function gamePicks(g, league) {
+    const k = gKick(g), ids = new Set([g.home, g.away]);
+    const hist = ((state.history && state.history.rows) || []).filter((r) => leagueOf(r) === league && ids.has(teamId(league, r.form_team)) && ids.has(teamId(league, r.opponent))
+      && (!k || Math.abs(Date.parse(r.commence_time || "") - k) < 12 * 36e5));
+    const rank = (r) => (r.fav ? 8 : 0) + ((r.agree_count ?? 0) >= 2 ? 4 : 0) + (r.nfl_lean === "strong" ? 2 : r.nfl_lean ? 1 : 0);
+    const seen = new Set(), out = [];
+    for (const r of [...gameRows(g, league), ...hist].filter((r) => rank(r) > 0 && r.market !== "player_1st_td").sort((a, b) => rank(b) - rank(a) || (b.edge ?? -9) - (a.edge ?? -9))) {
+      const key = normName(r.player_ref) + "|" + r.market + "|" + r.side; if (seen.has(key)) continue; seen.add(key); out.push(r);
+    }
+    return out;
+  }
+  function liveChance(cur, r, f) {
+    const td = r.market === "player_anytime_td", line = Number(r.line), over = r.side === "over";
+    if (cur == null) return null;
+    if (td) return cur >= 1 ? 1 : f <= 0 ? 0 : 1 - Math.pow(1 - (r.p_model ?? 0.3), f);
+    if (f <= 0 || (over && cur > line)) return (over ? cur > line : cur < line) ? 1 : 0;
+    if (!over && cur >= line) return 0;
+    const mean = r.proj_mean ?? r.form_mean ?? line, sd = Math.max(1, 0.45 * Math.max(line, mean));
+    const mu = cur + mean * f, s2 = Math.max(0.5, sd * Math.sqrt(f)), po = 1 - normCdf((line - mu) / s2);
+    return over ? po : 1 - po;
+  }
+  function gameLivePanel(g, league, box) {
+    const eg = box && box.games[0];
+    if (!eg) return `<div class="panel live"><h3><span><i class="dot2"></i>Live vs our numbers</span></h3><div class="foot" style="margin:0">ESPN has not listed this game yet. Retrying.</div></div>`;
+    const fin = eg.state === "post", pre = eg.state === "pre", f = eg.remaining ?? 1, gid = eg.id;
+    const cur = (name, stat) => { const pl = livePlayer(box, normName(name), gid); return pl && pl.stats[stat] != null ? pl.stats[stat] : pre ? null : pl ? 0 : null; };
+    const score = pre ? "" : `<div class="glsc"><span>${esc(abbr(league, g.away))} <b>${eg.away_score ?? 0}</b></span><span class="d">${esc(eg.detail || "")}</span><span><b>${eg.home_score ?? 0}</b> ${esc(abbr(league, g.home))}</span></div>`;
+    const model = g.model ? `<div class="foot" style="margin:2px 0 0;text-align:center">our pre-game score ${esc(abbr(league, g.away))} ${fmt1(g.model.away)} – ${fmt1(g.model.home)} ${esc(abbr(league, g.home))}</div>` : "";
+    const picks = gamePicks(g, league);
+    const tag = (r) => (r.fav ? "★ top play" : (r.agree_count ?? 0) >= 2 ? "both clear" : r.nfl_lean === "strong" ? "strong lean · unproven" : "lean · unproven");
+    const pickRows = picks.slice(0, 12).map((r) => {
+      const stat = STAT_OF[r.market], c0 = cur(r.player_ref, stat), ch = liveChance(c0, r, f), line = Number(r.line);
+      const mx = Math.max(line * 1.35, c0 || 0, 1), cls = ch == null ? "" : ch >= 0.5 ? "" : ch >= 0.2 ? "warn" : "bad";
+      const st = ch == null ? (pre ? "not started" : "no number yet") : ch >= 1 ? "✓ hit" : ch <= 0 ? "✗ dead" : `${pct(ch)} live`;
+      return `<div class="lvleg glp ${ch >= 1 ? "won" : ch === 0 ? "lost" : ""} ${r.fav ? "fav" : ""}"><div class="nm">${esc(r.player_ref)} ${r.market === "player_anytime_td" ? "to score" : `${r.side === "over" ? "o" : "u"}${r.line} ${esc((LABEL[r.market] || r.market).toLowerCase())}`}<span>${esc(tag(r))} · ${esc(bookName(r.book))}</span></div>
+        <div class="lvbar"><i class="${cls}" style="width:${c0 == null ? 0 : Math.min(100, (c0 / mx) * 100)}%"></i><u style="left:${(line / mx) * 100}%"></u></div>
+        <div class="st"><span>${c0 == null ? "—" : c0} / ${r.market === "player_anytime_td" ? 1 : r.line}${r.proj_mean != null ? ` · we projected ${fmt1(r.proj_mean)}` : ""}</span><span>${st}</span></div></div>`;
+    }).join("");
+    // every projected player: live line against projection, green when ahead of pace
+    const done = 1 - f, tbl = (id) => {
+      const blk = g.teams && g.teams[id]; if (!blk) return "";
+      let html = "";
+      for (const pos of ["QB", "RB", "WR", "TE"]) {
+        const ps = (blk.players || []).filter((p) => p.pos === pos && livePlayer(box, normName(p.player), gid)); if (!ps.length) continue;
+        const cols = COLS[league][pos];
+        html += `<table class="pl glt"><thead><tr><th>${pos}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>${ps.map((p) => {
+          const pk = picks.some((r) => normName(r.player_ref) === normName(p.player));
+          return `<tr><td>${pk ? "★ " : ""}${esc(p.player)}</td>${cols.map(([k]) => { const v = cur(p.player, k), pr = projVal(p, k), up = v != null && pr != null && v > 0 && v >= pr * done + Math.max(1, 0.1 * pr); return `<td class="${up ? "up" : ""}">${v ?? "—"}<small>${pr == null ? "" : fmt1(pr)}</small></td>`; }).join("")}</tr>`;
+        }).join("")}</tbody></table>`;
+      }
+      return html ? `<div class="team-h">${logoImg(league, id)}<b>${esc((team(league, id) || {}).name || id)}</b></div>${html}` : "";
+    };
+    const players = pre ? "" : tbl(g.away) + tbl(g.home);
+    const age = box.at ? Math.round((Date.now() - box.at) / 1000) : null;
+    return `<div class="panel live ${fin ? "fin" : ""}"><h3><span>${fin ? "Final vs our numbers" : `<i class="dot2"></i>Live vs our numbers`}</span><span style="text-transform:none;letter-spacing:0">${pre ? "starting soon" : fin ? "final" : age != null && age < 10 ? "just updated" : `updated ${age}s ago`}</span></h3>
+      ${score}${model}
+      ${pickRows ? `<div class="lsec2">Our picks <small>${g.frozen ? "as they stood at kickoff" : "on the board now"}</small></div>${pickRows}` : `<div class="foot" style="margin:8px 0 0">No top plays, both-clear or lean sides in this game.</div>`}
+      ${players ? `<div class="lsec2">Every player <small>live · small = our projection · green = ahead of pace</small></div>${players}` : ""}
+      <div class="foot" style="margin:8px 0 0">Live numbers from ESPN on your phone, every 45 seconds. "live" chance = stats so far plus our projection for the time left; rough.</div></div>`;
+  }
+  function gameLivePoll(g, league, s) {
+    const box0 = { at: 0 };
+    let last = null;
+    const tick = async () => {
+      if (!document.body.contains(s)) { clearInterval(iv); return; }
+      if (document.hidden) return;
+      try { last = { ...(await liveDirect(league, [gameNames(g, league)])), at: Date.now() }; }
+      catch (e) { const el = $("#gLive", s); if (el && !last) el.innerHTML = `<div class="panel live"><h3><span><i class="dot2"></i>Live vs our numbers</span></h3><div class="foot" style="margin:0;color:var(--amber)">Live update failed: ${esc(e.message)}. Retrying.</div></div>`; return; }
+      const el = $("#gLive", s); if (el) el.innerHTML = gameLivePanel(g, league, last || box0);
+    };
+    const iv = setInterval(tick, 45000);
+    tick();
+  }
+
   function openGame(g, league) {
     if (!g) return;
     const ta = team(league, g.away), th = team(league, g.home), m = g.model, w = when(g.kickoff_utc);
@@ -1151,6 +1245,7 @@
           <div class="mid2">${m ? "model score" : "@"}</div>
           <div>${big(g.home)}<div class="tnm">${esc((th && th.name) || g.home)}</div><div class="sc">${m ? fmt1(m.home) : ""}</div></div></div>
         <div style="margin-top:12px">${wpBar(g, league)}</div></div>
+      ${gLiveWindow(g) ? `<div id="gLive"><div class="panel live"><h3><span><i class="dot2"></i>Live vs our numbers</span><span style="text-transform:none;letter-spacing:0">loading…</span></h3></div></div>` : ""}
       ${gameGlance(g, league)}
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
       ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
@@ -1158,6 +1253,7 @@
       ${tdPanel(rows, league)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
       ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3><span>Player projections</span><span>tap a player for his recent games</span></h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
+    if (gLiveWindow(g)) gameLivePoll(g, league, s);
     const gp = $("#gprops", s);
     if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
     s.addEventListener("click", (e) => {
