@@ -671,7 +671,11 @@
     const mine = state.rows.filter((x) => x.event_id === r.event_id && normName(x.player_ref) === normName(r.player_ref));
     const byMk = new Map();
     mine.forEach((x) => { const a = byMk.get(x.market) || []; a.push(x); byMk.set(x.market, a); });
-    if (byMk.size < 2) { state.pmRows = []; return ""; }
+    // the stats we project for him that no book has posted (owner, 2026-10-01: college
+    // players often have one pick'em line, so the strip of "everything" never showed)
+    const pj = playerProj(r), extra = [];
+    if (pj) for (const mk of Object.keys(LABEL)) { const st = STAT_OF[mk]; if (!isTD({ market: mk }) && !byMk.has(mk) && pj[st] != null) extra.push([mk, pj[st]]); }
+    if (byMk.size + extra.length < 2) { state.pmRows = []; return ""; }
     const order = Object.keys(LABEL);
     const pick = (list) => { // the viewed book if it lists it, else Hard Rock, else any; then the side we lean to
       const books = [r.book, "hardrockbet_fl", ...list.map((x) => x.book)];
@@ -684,7 +688,18 @@
       const lean = x.edge != null && x.edge > 0 && !hold(x) && !x.volume, cur = x.market === r.market;
       const what = isTD(x) ? odds(x.price) : x.line;
       return `<button class="mchip ${lean ? "lean" : ""}" data-mk="${i}" aria-pressed="${cur}"><span>${esc(LABEL[x.market] || x.market)}</span><b>${what}</b><small>${lean ? `${isTD(x) ? "Yes" : x.side === "over" ? "▲ O" : "▼ U"} +${(x.edge * 100).toFixed(1)}` : "no lean"}</small></button>`;
-    }).join("")}</div>`;
+    }).join("")}${extra.map(([mk, v]) => `<div class="mchip proj" title="We project this; no book has posted a line"><span>${esc(LABEL[mk])}</span><b>${fmt1(v)}</b><small>proj · no line</small></div>`).join("")}</div>`;
+  }
+  // his projected stat line for this game from games.json (both leagues), by team and name
+  function playerProj(r) {
+    const lg = leagueOf(r), gs = (state.games && (lg === "cfb" ? state.games.cfb_games : state.games.games)) || [];
+    const tid = teamId(lg, r.form_team), key = normName(r.player_ref);
+    for (const g of gs) for (const [t, blk] of Object.entries(g.teams || {})) {
+      if (tid && teamId(lg, t) !== tid) continue;
+      const p = (blk.players || []).find((x) => normName(x.player) === key);
+      if (p && p.proj) return p.proj;
+    }
+    return null;
   }
   // ADR-0073: the other sportsbooks' number for the same side (already in every snapshot)
   function bookLines(r) {
@@ -1262,6 +1277,60 @@
     tick();
   }
 
+
+  // ADR-0103: team matchup card - each offense against the other defense. Counts (points,
+  // yards) per game for and allowed, opponent-adjusted (rankings.json profiles) or raw this
+  // season; efficiency from the unit ratings (EPA, line play); style (pace, pass rate).
+  const GTM = [["pts", "Points", 1], ["yds", "Total yards", 0], ["pass", "Pass yards", 0], ["rush", "Rush yards", 0]];
+  // offense category, defense category, label, value format
+  const GEFF = [["pass_off", "pass_def", "Pass EPA/play", "epa"], ["rush_off", "rush_def", "Run EPA/play", "epa"], ["pass_pro", "pass_rush", "Pressure rate", "pct"], ["run_block", "run_stop", "Yds before contact", "yds"]];
+  let catAt = null, catIdx = {};
+  function catsFor(lg) {
+    const rk = state.rankings; if (!rk || !rk.leagues || !rk.leagues[lg]) return null;
+    if (catAt !== rk.exported_at) { catIdx = {}; catAt = rk.exported_at; }
+    if (!catIdx[lg]) { const m = {}; (rk.leagues[lg].categories || []).forEach((c) => { m[c.key] = { c, by: {} }; (c.rows || []).forEach((r) => { m[c.key].by[r.team] = r; }); }); catIdx[lg] = m; }
+    return catIdx[lg];
+  }
+  const rkTag = (rk, n, plain) => (rk == null || !n ? "" : `<i class="rkc ${plain ? "" : rk <= Math.ceil(n / 3) ? "g" : rk > n - Math.ceil(n / 3) ? "b" : ""}">${ordinal(rk)}</i>`);
+  const fmtCat = (v, f) => (v == null ? "—" : f === "epa" ? (Math.abs(v) < 0.005 ? "0.00" : (v > 0 ? "+" : "") + Number(v).toFixed(2)) : f === "pct" ? Math.round(v * 100) + "%" : Number(v).toFixed(f === "yds" ? 1 : 0));
+  function teamMatchupFb(g, league) {
+    const rk = state.rankings && state.rankings.leagues && state.rankings.leagues[league];
+    const P = rk && rk.profiles, C = catsFor(league);
+    const A = teamId(league, g.away), H = teamId(league, g.home);
+    const pa = P && P.teams && P.teams[A], ph = P && P.teams && P.teams[H];
+    if (!pa && !ph && !C) return "";
+    const adj = store.get("archer-tmode", "adj") === "adj", n = (P && P.n_teams) || (rk && rk.n_teams) || 0;
+    const v = (rec, side, dp) => { if (!rec) return null; const x = adj ? rec[side] : rec[side + "_raw"]; return x == null ? null : Number(x).toFixed(dp); };
+    // raw mode ranks the raw averages, so the tag matches the number beside it
+    const rawRk = {};
+    if (!adj && P && P.teams) GTM.forEach(([k]) => { ["f", "a"].forEach((sd) => { const xs = Object.entries(P.teams).filter(([, r]) => r[k] && r[k][sd + "_raw"] != null).sort((x, y) => (sd === "f" ? y[1][k].f_raw - x[1][k].f_raw : x[1][k].a_raw - y[1][k].a_raw)); xs.forEach(([t], i) => { rawRk[`${k}|${sd}|${t}`] = i + 1; }); }); });
+    const rkOf = (rec, k, sd, t) => (adj ? rec[sd + "_rk"] : rawRk[`${k}|${sd}|${t}`]);
+    const exp = (k, off, dfn) => { const f = P && P.fit && P.fit[k]; return f && f.off[off] != null && f.def[dfn] != null ? f.lg * f.off[off] * f.def[dfn] : null; };
+    const block = (off, dfn, po, pd) => {
+      const counts = GTM.map(([k, lab, dp]) => {
+        const ro = po && po[k], rd = pd && pd[k]; if (!ro && !rd) return "";
+        const ex = adj ? exp(k, off, dfn) : null;
+        return `<div class="tmr2"><span class="l">${lab}</span><span class="v">${v(ro, "f", dp) ?? "—"}${ro ? rkTag(rkOf(ro, k, "f", off), n) : ""}<small>gains</small></span><span class="v">${v(rd, "a", dp) ?? "—"}${rd ? rkTag(rkOf(rd, k, "a", dfn), n) : ""}<small>allows</small></span><span class="ex">${ex == null ? "" : `${ex.toFixed(dp)}<small>this game</small>`}</span></div>`;
+      }).join("");
+      const eff = !C ? "" : GEFF.map(([ok, dk, lab, f]) => {
+        const ro = C[ok] && C[ok].by[off], rd = C[dk] && C[dk].by[dfn]; if (!ro && !rd) return "";
+        const no = C[ok] ? C[ok].c.rows.length : n, nd = C[dk] ? C[dk].c.rows.length : n;
+        return `<div class="tmr2"><span class="l">${lab}</span><span class="v">${ro ? fmtCat(ro.value, f) : "—"}${ro ? rkTag(ro.rank, no) : ""}<small>${ok === "pass_pro" ? "allows" : ok === "run_block" ? "gets" : "gains"}</small></span><span class="v">${rd ? fmtCat(rd.value, f) : "—"}${rd ? rkTag(rd.rank, nd) : ""}<small>${dk === "pass_rush" ? "creates" : "allows"}</small></span><span class="ex"></span></div>`;
+      }).join("");
+      return `<div class="tmh2"><span>${logoImg(league, off)}${esc(abbr(league, off))} offense</span><span class="vs">vs</span><span>${logoImg(league, dfn)}${esc(abbr(league, dfn))} defense</span></div>${counts}${eff && adj ? `<div class="tmsub">Efficiency · opponent-adjusted</div>${eff}` : ""}`;
+    };
+    const style = C ? [["pace", "Plays per game", "num"], ["pass_rate", "Pass rate (close games)", "pct"]].map(([k, lab, f]) => {
+      const c = C[k]; if (!c) return ""; const ra = c.by[A], rh = c.by[H];
+      return `<div class="tmr2"><span class="l">${lab}</span><span class="v">${ra ? fmtCat(ra.value, f) : "—"}${ra ? rkTag(ra.rank, c.c.rows.length, true) : ""}<small>${esc(abbr(league, A))}</small></span><span class="v">${rh ? fmtCat(rh.value, f) : "—"}${rh ? rkTag(rh.rank, c.c.rows.length, true) : ""}<small>${esc(abbr(league, H))}</small></span><span class="ex"></span></div>`;
+    }).join("") : "";
+    const read = [[A, pa, H, ph], [H, ph, A, pa]].map(([t1, r1, t2, r2]) => (r1 && r2 && r1.pts && r2.pts ? `${esc(abbr(league, t1))}'s offense (${ordinal(rkOf(r1.pts, "pts", "f", t1))} in points) meets ${esc(abbr(league, t2))}'s defense (${ordinal(rkOf(r2.pts, "pts", "a", t2))} fewest allowed)` : "")).filter(Boolean).join("; ");
+    return `<div class="panel" id="gtmP"><h3><span>Team matchup</span><span class="seg3"><button data-gtmode="adj" aria-pressed="${adj}">Adjusted</button><button data-gtmode="raw" aria-pressed="${!adj}">Raw</button></span></h3>
+      ${read ? `<div class="tmread">${read}.</div>` : ""}
+      ${block(A, H, pa, ph)}${block(H, A, ph, pa)}
+      ${style ? `<div class="tmh2"><span>Style</span></div>${style}` : ""}
+      <div class="foot" style="margin:8px 0 0">${adj ? "Per game against an average opponent: each team is read against the defenses and offenses it actually faced (strength of schedule), recent games count more, last season carries a little. \"This game\" = what those ratings expect here." : "Raw: this season's per-game averages, opponents not accounted for."} Ranks out of ${n} (green: top third, red: bottom third; defense rank 1 = allows the fewest; style ranks are just where a team sits, not good or bad). Context only: picks come from the props model.</div></div>`;
+  }
+
   function openGame(g, league) {
     if (!g) return;
     const ta = team(league, g.away), th = team(league, g.home), m = g.model, w = when(g.kickoff_utc);
@@ -1279,6 +1348,7 @@
       ${gameGlance(g, league)}
       ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
       ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
+      ${teamMatchupFb(g, league)}
       ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · context, not in the projection</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
       ${tdPanel(rows, league)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
@@ -1287,6 +1357,7 @@
     const gp = $("#gprops", s);
     if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
     s.addEventListener("click", (e) => {
+      const tm = e.target.closest("[data-gtmode]"); if (tm) { store.set("archer-tmode", tm.dataset.gtmode); buzz(); const box = $("#gtmP", s); if (box) box.outerHTML = teamMatchupFb(g, league); return; }
       const b = e.target.closest("button[data-gleg]"); if (b) { toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
       const p = e.target.closest("[data-gp]"); if (p) openPlayer(rows[Number(p.dataset.gp)]);
       const pl = e.target.closest("[data-pl]"); if (pl) { const x = state.gpl[Number(pl.dataset.pl)]; if (x) openStatLog(x, g); return; }
