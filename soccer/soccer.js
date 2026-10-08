@@ -58,7 +58,7 @@
 
 
   // --------------------------------------------------------------- live (S-024)
-  // live.json: the server's in-play fetch every few minutes while a match is on. The page
+  // live.json: the server's in-play fetch once per 15-minute tick while a match is on (S-026). The page
   // polls it each minute while a match is in its window and compares the game with the
   // projections frozen at kickoff. Our picks (lines we beat a book on) and our strongest
   // chances are pinned on top.
@@ -170,7 +170,7 @@
       ${pickRows ? `<div class="lsec">★ Our picks <span>lines we beat a book on, as they stood at kickoff</span></div>${pickRows}` : ""}
       ${chRows ? `<div class="lsec">Our strongest calls <span>the chances we rated highest</span></div>${chRows}` : ""}
       ${tracker ? `<div class="lsec">Every player</div>${tracker}` : ""}
-      <div class="lnote">${unproven} Numbers refresh about every 5 minutes while the match is on (Sportmonks, through our server). Projections are the ones we published before kickoff.</div></div>`;
+      <div class="lnote">${unproven} Numbers refresh about every 15 minutes while the match is on (Sportmonks, through our server). Projections are the ones we published before kickoff.</div></div>`;
   }
 
 
