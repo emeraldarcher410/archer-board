@@ -1721,13 +1721,21 @@
     if (rows.length < 2) return `<div class="empty" style="padding:14px">The line appears after a couple of graded picks.</div>`;
     const seq = rows.slice().sort((a, b) => String(a.commence_time).localeCompare(String(b.commence_time)));
     let run = 0; const pts = [0].concat(seq.map((r) => (run += r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1)));
+    const days = []; seq.forEach((r, i) => { const d = String(r.commence_time || "").slice(0, 10); if (d && (!days.length || days[days.length - 1].d !== d)) days.push({ d, i: i + 1 }); });
+    return drawUnits(pts, days);
+  }
+  // ADR-0105: the season's running units, one point per day (record.json)
+  function seasonUnitsChart(series) {
+    if (!series || series.length < 2) return `<div class="empty" style="padding:14px">The line appears after a couple of graded days.</div>`;
+    return drawUnits([0].concat(series.map((x) => x[1])), series.map((x, i) => ({ d: x[0], i: i + 1 })));
+  }
+  function drawUnits(pts, days) {
     const W = 340, H = 150, L = 34, R = 8, T = 12, B = 124;
     const lo = Math.min(0, ...pts), hi = Math.max(0, ...pts), span = hi - lo || 1;
     const x = (i) => L + (i / (pts.length - 1)) * (W - L - R), y = (v) => T + ((hi - v) / span) * (B - T);
     const path = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
     const last = pts[pts.length - 1], col = last >= 0 ? "var(--accent-2)" : "var(--red)";
     const area = `${path}L${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z`;
-    const days = []; seq.forEach((r, i) => { const d = String(r.commence_time || "").slice(0, 10); if (d && (!days.length || days[days.length - 1].d !== d)) days.push({ d, i: i + 1 }); });
     const step = Math.max(1, Math.ceil(days.length / 5));
     let lastX = -99; // day labels at least 30px apart: busy days bunch their first picks together
     const ticks = days.filter((_, k) => k % step === 0).filter(({ i }) => { if (x(i) - lastX < 30) return false; lastX = x(i); return true; }).map(({ d, i }) => { const dt = new Date(d + "T12:00:00"); return `<text x="${x(i).toFixed(1)}" y="${B + 16}" text-anchor="middle">${dt.getMonth() + 1}/${dt.getDate()}</text>`; }).join("");
@@ -1743,15 +1751,20 @@
   function reportCard(all) {
     const by = {};
     all.filter((r) => r.grade !== "push").forEach((r) => { (by[r.market] = by[r.market] || []).push(r); });
-    const rows = Object.entries(by).map(([mk, rs]) => {
+    return reportCardHtml(Object.entries(by).map(([mk, rs]) => {
       const n = rs.length, hit = rs.filter((r) => r.grade === "won").length / n, need = rs.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n;
       const cl = rs.filter((r) => r.flag_p_book != null && r.p_book != null && Number(r.flag_line) === Number(r.line)).map((r) => r.p_book - r.flag_p_book);
-      const clv = cl.length ? cl.reduce((a, x) => a + x, 0) / cl.length : null;
+      return { mk, n, hit, need, clv: cl.length ? cl.reduce((a, x) => a + x, 0) / cl.length : null };
+    }), `Last ${(state.history && state.history.days) || 14} days`);
+  }
+  function reportCardHtml(markets, span) {
+    const rows = markets.map((x) => {
+      const { n, hit, need, clv } = x;
       const badge = n < 30 ? "unproven" : hit < need - 0.03 || (clv != null && clv < -0.01) ? "struggling" : hit >= need && (clv == null || clv >= 0) ? (n >= 150 ? "proven" : "promising") : "unproven";
-      return { mk, n, hit, need, clv, badge };
+      return { ...x, badge };
     }).sort((a, b) => b.n - a.n);
     return rows.length ? `<table class="rc"><tr><th>Market</th><th>Picks</th><th>Hit</th><th>Needs</th><th>CLV</th></tr>${rows.map((x) => `<tr><td>${esc(LABEL[x.mk] || GLABEL[x.mk] || x.mk)} <span class="badge ${x.badge}">${x.badge}</span></td><td>${x.n}</td><td style="color:${x.hit >= x.need ? "var(--accent-2)" : "var(--red)"}">${pct(x.hit)}</td><td>${pct(x.need)}</td><td>${x.clv == null ? "—" : (x.clv >= 0 ? "+" : "") + (x.clv * 100).toFixed(1)}</td></tr>`).join("")}</table>
-      <div class="foot" style="margin:8px 0 0">The picks in the tab above, by market: props (touchdowns included) and, under Either clears, the model's spread, total and moneyline sides at Hard Rock. Last ${(state.history && state.history.days) || 14} days. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
+      <div class="foot" style="margin:8px 0 0">The picks in the tab above, by market: props (touchdowns included) and, under Either clears, the model's spread, total and moneyline sides at Hard Rock. ${span}. CLV = how far the fair price moved toward the pick between first flagged and kickoff (points). Badges: unproven under 30 picks; promising = hitting its break-even with non-negative CLV; proven needs 150+. The weekly scorer on the server is the official record.</div>`
       : `<div class="empty" style="padding:14px">Nothing graded yet.</div>`;
   }
   // ADR-0095: the game model's projected score for every game, graded against the line it was
@@ -1829,27 +1842,32 @@
     if (state.recFilter === "games") { calP.style.display = "none"; if (cardH) cardH.textContent = "our projected scores"; renderGameCard(); return; }
     calP.style.display = ""; if (cardH) cardH.textContent = "by market";
     const all = gradedHistory().concat(gradedGames()), f = state.recFilter;
+    const SL = state.record && state.record.leagues && state.record.leagues[state.league], S = SL && SL.tabs && SL.tabs[f];
     const liked = (r) => (r.agree_count ?? 0) >= 1 || r.game || (isTD(r) && (r.edge > 0 || r.off_market));
     // ADR-0093: the report card follows the tab, so each tab's markets can be read on their own
     const pick = all.filter((r) => (f === "fav" ? r.fav : f === "both" ? (r.agree_count ?? 0) >= 2 : f === "lean" ? !!r.nfl_lean : liked(r)));
-    $("#card").innerHTML = reportCard(pick);
-    const dec2 = pick.filter((r) => r.grade !== "push"), w = dec2.filter((r) => r.grade === "won").length, n = dec2.length;
-    const need = n ? dec2.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n : null;
-    const won1 = (r) => (r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1);
-    const profit = dec2.reduce((a, r) => a + won1(r), 0);
+    // ADR-0105: the totals, report card, running units and calibration are the season's
+    // (graded on the server); the list below stays the last 14 days
+    const sinceTxt = SL && SL.first ? new Date(SL.first + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+    $("#card").innerHTML = S ? reportCardHtml(S.markets, `This season${sinceTxt ? " (since " + sinceTxt + ")" : ""}`) : reportCard(pick);
+    const dec2 = pick.filter((r) => r.grade !== "push"), won1 = (r) => (r.grade === "won" ? 1 / (r.breakeven_p || 0.524) - 1 : -1);
+    const w = S ? S.w : dec2.filter((r) => r.grade === "won").length, n = S ? S.w + S.l : dec2.length;
+    const need = S ? S.need : n ? dec2.reduce((a, r) => a + (r.breakeven_p ?? 0.524), 0) / n : null;
+    const profit = S ? S.units : dec2.reduce((a, r) => a + won1(r), 0);
     // a profit that rests on one or two longshots is not an edge (ADR-0093): say so
-    const top2 = dec2.map(won1).filter((u) => u > 0).sort((a, b) => b - a).slice(0, 2), ex2 = profit - top2.reduce((a, u) => a + u, 0);
+    const top2 = S ? S.top2 : dec2.map(won1).filter((u) => u > 0).sort((a, b) => b - a).slice(0, 2), ex2 = profit - top2.reduce((a, u) => a + u, 0);
     const longshot = n && profit > 0 && top2[0] >= 3 && ex2 < profit / 2 ? `<div class="kpi bad" style="grid-column:1/-1"><b>${ex2 >= 0 ? "+" : "−"}${Math.abs(ex2).toFixed(1)}u</b><span style="white-space:normal">without the ${top2.length === 1 ? "biggest winner" : "two biggest winners"} (+${top2.map((u) => u.toFixed(1)).join("u, +")}u) — this profit is mostly longshot luck</span></div>` : "";
-    $("#recSub").textContent = state.history ? `last ${state.history.days || 14} days` : "";
+    $("#recSub").textContent = S ? `this season${sinceTxt ? " · since " + sinceTxt : ""}` : state.history ? `last ${state.history.days || 14} days` : "";
     $("#recKpis").innerHTML = `<div class="kpi"><b>${w}–${n - w}</b><span>Record</span></div>
       <div class="kpi ${n && w / n >= (need || 0.524) ? "good" : n ? "bad" : ""}"><b>${n ? pct(w / n) : "—"}</b><span>Hit rate</span></div>
       <div class="kpi"><b>${need ? pct(need) : "—"}</b><span>Needed</span></div>
       <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>${longshot}`;
-    $("#units").innerHTML = unitsChart(dec2);
+    $("#units").innerHTML = S ? seasonUnitsChart(S.series) : unitsChart(dec2);
     // calibration on everything graded, by the best estimate
     const bins = [[0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
-    const calRows = bins.map(([lo, hi]) => { const s = all.filter((r) => r.grade !== "push" && r.p_model != null && r.p_model >= lo && r.p_model < hi); const k = s.filter((r) => r.grade === "won").length; return { lo, hi, n: s.length, rate: s.length ? k / s.length : null, mid: s.length ? s.reduce((a, r) => a + r.p_model, 0) / s.length : (lo + Math.min(hi, 0.75)) / 2 }; });
-    $("#cal").innerHTML = all.length ? calRows.map((c) => `<div class="r"><span>${pct(c.lo)}${c.hi > 1 ? "+" : "–" + pct(c.hi)}</span><div class="b2">${c.rate != null ? `<i style="width:${c.rate * 100}%"></i>` : ""}<u style="left:${c.mid * 100}%"></u></div><span>${c.rate != null ? pct(c.rate) + " · " + c.n : "—"}</span></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Bar = actual hit rate · tick = what the board predicted. Bars reaching their tick means the percentages can be trusted.</div>`
+    const calRows = S && SL.cal ? SL.cal.map((c) => ({ ...c, mid: c.mid ?? (c.lo + Math.min(c.hi, 0.75)) / 2 }))
+      : bins.map(([lo, hi]) => { const s = all.filter((r) => r.grade !== "push" && r.p_model != null && r.p_model >= lo && r.p_model < hi); const k = s.filter((r) => r.grade === "won").length; return { lo, hi, n: s.length, rate: s.length ? k / s.length : null, mid: s.length ? s.reduce((a, r) => a + r.p_model, 0) / s.length : (lo + Math.min(hi, 0.75)) / 2 }; });
+    $("#cal").innerHTML = (S ? calRows.some((c) => c.n) : all.length) ? calRows.map((c) => `<div class="r"><span>${pct(c.lo)}${c.hi > 1 ? "+" : "–" + pct(c.hi)}</span><div class="b2">${c.rate != null ? `<i style="width:${c.rate * 100}%"></i>` : ""}<u style="left:${c.mid * 100}%"></u></div><span>${c.rate != null ? pct(c.rate) + " · " + c.n : "—"}</span></div>`).join("") + `<div class="foot" style="margin:4px 0 0">Bar = actual hit rate · tick = what the board predicted. Bars reaching their tick means the percentages can be trusted.</div>`
       : `<div class="empty" style="padding:14px">Nothing graded yet — results appear the morning after games.</div>`;
     const byDay = {}; pick.forEach((r) => { const d = String(r.commence_time || "").slice(0, 10); (byDay[d] = byDay[d] || []).push(r); });
     const days = Object.keys(byDay).sort().reverse();
@@ -2788,11 +2806,11 @@
   // everything the app reads is the published board; refreshing it never spends Odds API credits
   async function loadData() {
     const before = state.asOf;
-    const [data, g, r, h, rk] = await Promise.all([get("screen.json"), get("games.json"), get("results.json"), get("history.json"), get("rankings.json"), assetsReady]);
+    const [data, g, r, h, rk, rc] = await Promise.all([get("screen.json"), get("games.json"), get("results.json"), get("history.json"), get("rankings.json"), get("record.json"), assetsReady]);
     state.rankings = rk; if (state.gseg === "ranks") renderRankings();
     applyBoard(data);
     state.games = g || {}; renderGames();
-    state.results = r; state.history = h;
+    state.results = r; state.history = h; state.record = rc; // ADR-0105: season totals
     if (r) { state.bets.forEach(settle); saveBets(); if (state.tab === "bets") renderBets(); }
     if (state.tab === "record") renderRecord();
     $("#newBoard").classList.add("hidden");
