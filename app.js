@@ -125,13 +125,21 @@
   const timingChip = (r) => (r.timing === "now" ? `<span class="verdict now" title="${esc(r.timing_why || "")}">⚡ Bet now</span>` : "");
   // ADR-0085: a pick that clears its price is "likely" (we give it 50%+) or "value" (under 50%,
   // but the price pays more than it should: Hurts over 1.5 pass TDs at +130, 47% vs 43% needed)
+  // ADR-0107: the chance we show, corrected by how much of what we said above a coin flip came
+  // true on our graded picks this season (record.json). Display only: picks and rules read
+  // p_model unchanged. Touchdowns keep theirs (their lines are not set near 50%).
+  const shownP = (r) => {
+    const p = r && r.p_model; if (p == null || isTD(r)) return p;
+    const cal = state.record && state.record.leagues && state.record.leagues[leagueOf(r)], c = cal && cal.calib && cal.calib.c;
+    return c == null || c >= 0.999 ? p : 0.5 + c * (p - 0.5);
+  };
   const clearsPrice = (r) => r.p_model != null && r.p_model >= (r.breakeven_p ?? 0.524) && r.verdict !== "Out";
   const pickKind = (r) => (!clearsPrice(r) ? null : r.p_model >= LIKELY ? "likely" : "value");
   function kindChip(r) {
     const k = pickKind(r); if (!k) return "";
     return k === "likely"
-      ? `<span class="verdict likely" title="We think this hits more often than not: ${pct(r.p_model)}">Likely ${pct(r.p_model)}</span>`
-      : `<span class="verdict value" title="Wins less than half the time (${pct(r.p_model)}), but ${r.dfs ? "the app" : odds(r.price)} only needs ${pct(r.breakeven_p)}: a price pick">Value · ${r.dfs ? "price" : "pays " + odds(r.price)}</span>`;
+      ? `<span class="verdict likely" title="We think this hits more often than not: ${pct(shownP(r))}">Likely ${pct(shownP(r))}</span>`
+      : `<span class="verdict value" title="Wins less than half the time (${pct(shownP(r))}), but ${r.dfs ? "the app" : odds(r.price)} only needs ${pct(r.breakeven_p)}: a price pick">Value · ${r.dfs ? "price" : "pays " + odds(r.price)}</span>`;
   }
   function verdictChip(r) {
     if (r.fav) return `<span class="verdict fav">★ Top play</span>${kindChip(r)}${timingChip(r)}`;
@@ -307,7 +315,7 @@
       const lg = leagueOf(r), t = team(lg, r.form_team), be = r.breakeven_p ?? 0.524;
       return `<div class="top" data-top="${k}" style="--tc:${esc((t && t.color) || "#334155")}"><span class="rk">${k + 1}</span>
         <div class="who2">${avatar(r.player_ref, lg, r.form_team, "sm")}<div class="who"><div class="nm">${esc(r.player_ref)}</div><div class="ctx">${ctxLine(r)}</div></div></div>
-        <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(r.p_model)}<small class="probl">${isTD(r) ? "to score" : "to hit"}</small></span></div>
+        <div class="p"><span class="big">${isTD(r) ? sideLine(r) : `<span class="ou">${r.side === "over" ? "O" : "U"}</span>${r.line}`} <small class="mk3">${esc(LABEL[r.market] || r.market)}</small></span><span class="prob">${pct(shownP(r))}<small class="probl">${isTD(r) ? "to score" : "to hit"}</small></span></div>
         <div class="foot2">${esc(bookName(r.book))} ${r.dfs ? "· needs " + pct(be) : odds(r.price) + " · needs " + pct(be)}${r._also && r._also.length ? ` · also ${r._also.map((x) => esc(bookName(x.book))).join(", ")}` : ""}</div></div>`;
     };
     const row = (title, sub, rows, off) => (rows.length ? `<div class="tops-h">${title} <small>${sub}</small></div><div class="tops">${rows.map((r, k) => card1(r, off + k)).join("")}</div>` : "");
@@ -370,7 +378,7 @@
   function alsoRow(r) {
     if (!r._also || !r._also.length) return "";
     return `<div class="also"><span class="lab">Also on</span>${r._also.map((x) => { const i = alsoRows.push(x) - 1, be = x.breakeven_p ?? 0.524, ok = (x.p_model ?? 0) >= be;
-      return `<button class="alsoc ${ok ? "ok" : ""}" data-also="${i}" type="button"><b>${esc(bookName(x.book))}</b> ${isTD(x) ? "" : `${x.side === "over" ? "o" : "u"}${x.line}`}${x.dfs ? "" : ` ${odds(x.price)}`} · ${pct(x.p_model)}<small> / ${pct(be)}</small></button>`; }).join("")}</div>`;
+      return `<button class="alsoc ${ok ? "ok" : ""}" data-also="${i}" type="button"><b>${esc(bookName(x.book))}</b> ${isTD(x) ? "" : `${x.side === "over" ? "o" : "u"}${x.line}`}${x.dfs ? "" : ` ${odds(x.price)}`} · ${pct(shownP(x))}<small> / ${pct(be)}</small></button>`; }).join("")}</div>`;
   }
   function renderProps() {
     if (state.league === "soccer") return; // S-020: soccer draws its own view
@@ -716,7 +724,7 @@
     const glog = gameLog(r), vals = glog.map((x) => x.v), tgs = glog.map((x) => x.tgt).filter((x) => x != null);
     const tgLine = tgs.length ? ` · ${(tgs.reduce((a, b) => a + b, 0) / tgs.length).toFixed(1)} targets/g` : "";
     const others = state.rows.filter((x) => x.event_id === r.event_id && x.market === r.market && x.side === r.side && normName(x.player_ref) === normName(r.player_ref));
-    const cmp = others.map((x) => `<div class="r ${x === r ? "me" : ""}"><span><span class="sw" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${DOT[x.book] || "#94A3B8"};margin-right:6px"></span>${esc(bookName(x.book))}<small> · ${x.dfs ? "needs " + pct(x.breakeven_p) : odds(x.price)}</small></span><b>${x.line}</b><small>${pct(x.p_model)}</small></div>`).join("")
+    const cmp = others.map((x) => `<div class="r ${x === r ? "me" : ""}"><span><span class="sw" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${DOT[x.book] || "#94A3B8"};margin-right:6px"></span>${esc(bookName(x.book))}<small> · ${x.dfs ? "needs " + pct(x.breakeven_p) : odds(x.price)}</small></span><b>${x.line}</b><small>${pct(shownP(x))}</small></div>`).join("")
       + (r.ref_book && r.ref_line != null ? `<div class="r"><span>${esc(bookName(r.ref_book))}<small> · sportsbook reference</small></span><b>${r.ref_line}</b><small>ref</small></div>` : "")
       + bookLines(r);
     const watched = state.watch.has(normName(r.player_ref));
@@ -884,7 +892,7 @@
     x.fillStyle = "#EAF0F7"; x.font = font(700, 110); x.fillText(r.player_ref, 80, 470);
     x.fillStyle = "#A5B3C6"; x.font = font(500, 40, "Inter, sans-serif"); x.fillText(`${r.market_label || LABEL[r.market] || r.market} · ${bookName(r.book)}${r.opponent ? " · vs " + r.opponent : ""}`, 84, 540);
     x.fillStyle = r.side === "over" ? "#34D399" : "#7CB4FB"; x.font = font(800, 200); x.fillText(isTD(r) ? (r.side === "over" ? "YES" : "NO") : `${r.side === "over" ? "OVER" : "UNDER"} ${r.line}`, 76, 800);
-    x.fillStyle = "#EAF0F7"; x.font = font(700, 120); x.fillText(pct(r.p_model), 80, 1010);
+    x.fillStyle = "#EAF0F7"; x.font = font(700, 120); x.fillText(pct(shownP(r)), 80, 1010);
     x.fillStyle = "#A5B3C6"; x.font = font(500, 36, "Inter, sans-serif"); x.fillText(`best estimate · needs ${pct(r.breakeven_p)}`, 84, 1070);
     x.fillStyle = "#F59E0B"; x.font = font(700, 30, "Inter, sans-serif"); x.fillText("UNVALIDATED MODEL · NOT BETTING ADVICE", 84, 1270);
     c.toBlob(async (b) => {
@@ -934,7 +942,7 @@
         ${log.length ? `<table class="pl"><thead><tr><th>Game</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>
           ${log.map((r) => `<tr><td>Wk ${r.wk} ${r.opp ? "vs " + esc(abbr(league, r.opp) || r.opp) : ""}</td>${cols.map(([k]) => `<td>${r[k] == null ? "–" : r[k]}</td>`).join("")}</tr>`).join("")}
           <tr class="avg"><td>Average</td>${cols.map(([k]) => `<td>${avg(k) == null ? "–" : fmt1(avg(k))}</td>`).join("")}</tr></tbody></table>` : `<div class="empty" style="padding:14px">No games on record yet</div>`}</div>
-      ${props.length ? `<div class="panel"><h3><span>His props</span></h3>${props.map((r, i) => `<div class="partner" data-lp="${i}" style="cursor:pointer"><div class="who"><b>${esc(LABEL[r.market] || r.market)} ${sideLine(r)}</b><small>${esc(bookName(r.book))} · ${pct(r.p_model)} to hit</small></div>${verdictChip(r)}</div>`).join("")}</div>`
+      ${props.length ? `<div class="panel"><h3><span>His props</span></h3>${props.map((r, i) => `<div class="partner" data-lp="${i}" style="cursor:pointer"><div class="who"><b>${esc(LABEL[r.market] || r.market)} ${sideLine(r)}</b><small>${esc(bookName(r.book))} · ${pct(shownP(r))} to hit</small></div>${verdictChip(r)}</div>`).join("")}</div>`
         : `<div class="note-card">No lines posted for him yet. Props show here once a book lists them.</div>`}`, true);
     sh.addEventListener("click", (e) => {
       const lp = e.target.closest("[data-lp]"); if (lp) { openPlayer(props[Number(lp.dataset.lp)]); return; }
@@ -1355,7 +1363,7 @@
       ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3><span>Player projections</span><span>tap a player for his recent games</span></h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
     if (gLiveWindow(g)) gameLivePoll(g, league, s);
     const gp = $("#gprops", s);
-    if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(r.p_model)}</span>`}</div>`).join("");
+    if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(shownP(r))}</span>`}</div>`).join("");
     s.addEventListener("click", (e) => {
       const tm = e.target.closest("[data-gtmode]"); if (tm) { store.set("archer-tmode", tm.dataset.gtmode); buzz(); const box = $("#gtmP", s); if (box) box.outerHTML = teamMatchupFb(g, league); return; }
       const b = e.target.closest("button[data-gleg]"); if (b) { toggleLeg(legIndex[Number(b.dataset.gleg)]); return; }
@@ -1525,7 +1533,7 @@
       ${apps.length > 1 ? `<div class="note-card" style="margin:8px 0 0">These picks are on different apps — an entry has to be on one app.</div>` : ""}
       ${same ? (joint ? `<div class="note-card" style="margin:8px 0 0">Picks in the same game move together. Priced from how these stats have moved together in past games: <b>${pct(joint.all, 1)}</b> all hit, vs ${pct(joint.ind, 1)} if they were unrelated.</div>` : `<div class="note-card" style="margin:8px 0 0;color:var(--amber)">Two picks share a game; there is no history for this pairing, so they are priced as unrelated.</div>`) : ""}
       ${opts.length ? `<div style="margin-top:12px">${opts.map((o, k) => `<div class="entry ${k === 0 && o.ev > 0 ? "best" : ""}"><div><b>${esc(bookName(o.app))} ${picks.length}-pick ${o.kind}${o.kind === "Power" ? " · " + o.m + "x" : ""}</b><small>${esc(o.note)}</small></div><div class="ev ${o.ev >= 0 ? "pos" : "neg"}">${o.ev >= 0 ? "+" : ""}${(o.ev * 100).toFixed(1)}%<small style="display:block;font-size:11px;color:var(--ink-3)">expected return</small></div></div>`).join("")}<div class="foot" style="margin:4px 0 0">Payouts come from config — check them in your app. ${joint ? "Same-game picks priced together; different games independent." : "Picks treated as independent."}</div></div>` : picks.length === 1 ? `<div class="foot" style="margin:8px 0 0">Add one or two more picks to see entry values.</div>` : ""}
-      ${partners.length ? `<h3 style="margin-top:14px">Good partners on ${esc(bookName(app))}</h3>${partners.map((r, k) => `<div class="partner">${avatar(r.player_ref, leagueOf(r), r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${pct(r.p_model)} · different game</small></div><button class="btn small" data-partner="${k}">+ Add</button></div>`).join("")}` : ""}
+      ${partners.length ? `<h3 style="margin-top:14px">Good partners on ${esc(bookName(app))}</h3>${partners.map((r, k) => `<div class="partner">${avatar(r.player_ref, leagueOf(r), r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${pct(shownP(r))} · different game</small></div><button class="btn small" data-partner="${k}">+ Add</button></div>`).join("")}` : ""}
     </div>`;
   }
   $("#builder").addEventListener("click", (e) => { const b = e.target.closest("[data-partner]"); if (b) toggleLeg(propLeg(state.partners[Number(b.dataset.partner)])); });
@@ -1831,6 +1839,17 @@
       <div><b>${esc(abbr(lg, r.away))} @ ${esc(abbr(lg, r.home))}</b><small>${esc(said(r))} · line ${esc(spreadTxt(r))}, O/U ${r.mkt_total ?? "—"}</small><small>Spread ${mark(r.ats)} · Total ${mark(r.tot)} · Winner ${mark(r.su)}</small></div><div class="act">${r.as}–${r.hs}<small style="display:block;font-size:11px;color:var(--ink-3)">final</small></div></div>`).join("")).join("")
       : `<div class="empty" style="padding:14px">No graded games yet.</div>`;
   }
+  // ADR-0107: closing-line value is the scoreboard - how far the fair price moved toward our
+  // picks between first flagged and kickoff. It says whether a group has an edge long before
+  // wins and losses can.
+  function clvKpi(c) {
+    if (!c || !c.n) return "";
+    const pts = (c.mean * 100).toFixed(1), sign = c.mean >= 0 ? "+" : "−";
+    const wk = (c.weeks || []).length, short = [c.n < 200 ? `${c.n} of 200 picks` : "", wk < 3 ? `${wk} of 3 weeks` : "", c.mean < 0.01 ? "under 1 pt, less than the vig" : "", c.z != null && c.z < 2 ? "not clear of noise yet" : ""].filter(Boolean).join(", ");
+    const say = { validated: "Proven: the market keeps moving our way", positive: `Moving our way — not proven (${short})`, flat: "No line-move edge yet", against: "The market moves against these" }[c.state] || "";
+    const cls = c.state === "validated" ? "good" : c.state === "against" ? "bad" : "";
+    return `<div class="kpi ${cls}" style="grid-column:1/-1"><b>${sign}${pts.replace("-", "")} pts</b><span style="white-space:normal">line moves toward our picks before kickoff · ${esc(say)}</span></div>`;
+  }
   function renderRecord() {
     if (state.league === "soccer") return; // S-020: soccer draws its own view
     // NFL leans (ADR-0092) are an NFL-only rule: no tab for college, and a college view never
@@ -1839,7 +1858,7 @@
     if (leanChip) leanChip.style.display = nfl ? "" : "none";
     if (!nfl && state.recFilter === "lean") { state.recFilter = "fav"; $$("#recFilters .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.rec === "fav"))); }
     const calP = $("#cal").parentElement, cardH = $("#card").parentElement.querySelector("h3 span:last-child");
-    if (state.recFilter === "games") { calP.style.display = "none"; if (cardH) cardH.textContent = "our projected scores"; renderGameCard(); return; }
+    if (state.recFilter === "games") { $("#byWeekP").style.display = "none"; calP.style.display = "none"; if (cardH) cardH.textContent = "our projected scores"; renderGameCard(); return; }
     calP.style.display = ""; if (cardH) cardH.textContent = "by market";
     const all = gradedHistory().concat(gradedGames()), f = state.recFilter;
     const SL = state.record && state.record.leagues && state.record.leagues[state.league], S = SL && SL.tabs && SL.tabs[f];
@@ -1861,8 +1880,14 @@
     $("#recKpis").innerHTML = `<div class="kpi"><b>${w}–${n - w}</b><span>Record</span></div>
       <div class="kpi ${n && w / n >= (need || 0.524) ? "good" : n ? "bad" : ""}"><b>${n ? pct(w / n) : "—"}</b><span>Hit rate</span></div>
       <div class="kpi"><b>${need ? pct(need) : "—"}</b><span>Needed</span></div>
-      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>${longshot}`;
+      <div class="kpi ${profit > 0 ? "good" : profit < 0 ? "bad" : ""}"><b>${n ? (profit >= 0 ? "+" : "") + profit.toFixed(1) + "u" : "—"}</b><span>Flat 1u</span></div>${longshot}${S ? clvKpi(S.clv) : ""}`;
     $("#units").innerHTML = S ? seasonUnitsChart(S.series) : unitsChart(dec2);
+    // ADR-0109: the record week by week (Tuesday to Monday), with that week's line moves
+    const BW = S && S.by_week ? S.by_week : [];
+    $("#byWeekP").style.display = BW.length ? "" : "none";
+    $("#byWeek").innerHTML = BW.length ? `<table class="rc"><tr><th>Week of</th><th>Record</th><th>Hit</th><th>Units</th><th>Line moves</th></tr>${BW.map((x) => { const n = x.w + x.l, d = new Date(x.week + "T12:00:00"); d.setDate(d.getDate() + 2);
+      return `<tr><td>${d.toLocaleDateString([], { month: "short", day: "numeric" })}</td><td>${x.w}–${x.l}${x.p ? "–" + x.p : ""}</td><td>${n ? pct(x.w / n) : "—"}</td><td style="color:${x.units >= 0 ? "var(--accent-2)" : "var(--red)"}">${(x.units >= 0 ? "+" : "") + x.units.toFixed(1)}u</td><td>${x.clv == null ? "—" : (x.clv >= 0 ? "+" : "−") + Math.abs(x.clv * 100).toFixed(1) + " pts"}</td></tr>`; }).join("")}</table>
+      <div class="foot" style="margin:6px 0 0">Each prop counted once. Weeks run Thursday to Monday. Line moves = how far the fair price moved toward our picks before kickoff that week.</div>` : "";
     // calibration on everything graded, by the best estimate
     const bins = [[0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
     const calRows = S && SL.cal ? SL.cal.map((c) => ({ ...c, mid: c.mid ?? (c.lo + Math.min(c.hi, 0.75)) / 2 }))
