@@ -1339,6 +1339,71 @@
       <div class="foot" style="margin:8px 0 0">${adj ? "Per game against an average opponent: each team is read against the defenses and offenses it actually faced (strength of schedule), recent games count more, last season carries a little. \"This game\" = what those ratings expect here." : "Raw: this season's per-game averages, opponents not accounted for."} Ranks out of ${n} (green: top third, red: bottom third; defense rank 1 = allows the fewest; style ranks are just where a team sits, not good or bad). Context only: picks come from the props model.</div></div>`;
   }
 
+  // ADR-0110: the game page as a matchup tool. Each position group's offense against what the
+  // other defense allows that position, from the opponent-adjusted rankings (rank 1 = best
+  // for that team in that category). Tilt = mean of the offense's strength and the defense's
+  // weakness percentiles, minus 50%: positive leans to the offense (overs), negative to the
+  // defense (unders). Context to find edges by hand; it prices nothing.
+  const TILT = [
+    ["qbp", "QB passing", "QB", ["pass_off", "pass_pro"], ["pass_def", "pass_rush"], ["pass_yds", "pass_att", "pass_cmp", "pass_td"]],
+    ["qbr", "QB running", "QB", [], ["qb_rush_allowed"], ["rush_yds", "rush_att"]],
+    ["rbr", "RB runs", "RB", ["rush_off", "run_block"], ["rush_def", "rb_rush_allowed", "run_stop"], ["rush_yds", "rush_att"]],
+    ["rbc", "RB catches", "RB", [], ["rb_rec_allowed", "cov_rb"], ["rec", "rec_yds"]],
+    ["wr", "WRs", "WR", ["pass_off"], ["wr_rec_allowed", "cov_wr"], ["rec", "rec_yds"]],
+    ["te", "TEs", "TE", ["pass_off"], ["te_rec_allowed", "cov_te"], ["rec", "rec_yds"]],
+  ];
+  const STAT_MK = Object.fromEntries(Object.entries(STAT_OF).map(([m, k]) => [k, m]));
+  const SHORT = { pass_off: "pass O", pass_pro: "pass pro", pass_def: "pass D", pass_rush: "pass rush", qb_rush_allowed: "vs QB runs", rush_off: "run O", run_block: "run block", rush_def: "run D", rb_rush_allowed: "vs RB runs", run_stop: "run stop", rb_rec_allowed: "vs RB catches", cov_rb: "cov vs RBs", wr_rec_allowed: "vs WRs", cov_wr: "cov vs WRs", te_rec_allowed: "vs TEs", cov_te: "cov vs TEs" };
+  function tilts(g, league) {
+    const C = catsFor(league); if (!C) return [];
+    const out = [];
+    for (const [off, dfn] of [[g.away, g.home], [g.home, g.away]]) {
+      const O = teamId(league, off), D = teamId(league, dfn);
+      for (const [key, label, pos, oc, dc, stats] of TILT) {
+        const parts = [], chips = [];
+        oc.forEach((k) => { const c = C[k], r = c && c.by[O]; if (!r) return; const n = c.c.rows.length; parts.push(1 - (r.rank - 1) / Math.max(1, n - 1)); chips.push({ t: O, k, rk: r.rank, n, off: true }); });
+        dc.forEach((k) => { const c = C[k], r = c && c.by[D]; if (!r) return; const n = c.c.rows.length; parts.push((r.rank - 1) / Math.max(1, n - 1)); chips.push({ t: D, k, rk: r.rank, n, off: false }); });
+        if (!parts.some((_, i) => !chips[i].off)) continue; // needs the defense's side
+        out.push({ off: O, dfn: D, key, label, pos, stats, chips, tilt: parts.reduce((a, x) => a + x, 0) / parts.length - 0.5 });
+      }
+    }
+    return out;
+  }
+  function tiltPlayers(g, league, t, rows) {
+    const blk = (g.teams || {})[t.off] || (g.teams || {})[Object.keys(g.teams || {}).find((k) => teamId(league, k) === t.off)];
+    const ps = ((blk && blk.players) || []).filter((p) => p.pos === t.pos).slice(0, t.pos === "WR" ? 3 : 2);
+    return ps.map((p) => {
+      const mine = rows.filter((r) => normName(r.player_ref) === normName(p.player) && t.stats.includes(STAT_OF[r.market]));
+      // one chip per stat: Hard Rock's line where it has one, else the first app's; the rest counted
+      const byMk = new Map();
+      mine.forEach((r) => { const a = byMk.get(r.market) || []; a.push(r); byMk.set(r.market, a); });
+      const chips = [];
+      byMk.forEach((rs, mk) => {
+        const r = rs.find((x) => !x.dfs) || rs[0], lines = new Set(rs.map((x) => x.line)), pv = p.proj && p.proj[STAT_OF[mk]];
+        state.tiltRows.push(r);
+        chips.push(`<button class="tchip" data-tilt="${state.tiltRows.length - 1}" type="button">${esc(LABEL[mk] || mk)} <b>${r.line}</b>${pv != null ? `<small>proj ${fmt1(pv)}</small>` : ""}${lines.size > 1 ? `<small>+${lines.size - 1} line${lines.size > 2 ? "s" : ""}</small>` : ""}</button>`);
+      });
+      if (!chips.length) { const st = t.stats.find((k) => p.proj && p.proj[k] != null); if (st) chips.push(`<span class="tchip none">${esc(LABEL[STAT_MK[st]] || st)} proj <b>${fmt1(p.proj[st])}</b><small>no line</small></span>`); }
+      return `<div class="tpl"><span class="tpn">${esc(p.player)}</span>${chips.join("")}</div>`;
+    }).join("");
+  }
+  const tiltBar = (x) => { const w = Math.min(50, Math.abs(x) * 100); return `<span class="tbar"><i style="${x >= 0 ? "left:50%" : "right:50%"};width:${w}%" class="${x >= 0 ? "up" : "dn"}"></i></span>`; };
+  const tiltChip = (league, c) => `<i class="rkc ${c.off ? (c.rk <= Math.ceil(c.n / 3) ? "g" : c.rk > c.n - Math.ceil(c.n / 3) ? "b" : "") : (c.rk > c.n - Math.ceil(c.n / 3) ? "g" : c.rk <= Math.ceil(c.n / 3) ? "b" : "")}" title="${esc(abbr(league, c.t))} ${esc(SHORT[c.k] || c.k)}: ${ordinal(c.rk)} of ${c.n}">${esc(abbr(league, c.t))} ${esc(SHORT[c.k] || c.k)} ${ordinal(c.rk)}</i>`;
+  function tiltPanel(g, league, rows) {
+    const T = tilts(g, league); if (!T.length) return "";
+    state.tiltRows = [];
+    const top = T.slice().sort((a, b) => Math.abs(b.tilt) - Math.abs(a.tilt)).slice(0, 4);
+    const card = (t) => `<div class="tilt"><div class="th"><span>${logoImg(league, t.off)}<b>${esc(abbr(league, t.off))} ${esc(t.label)}</b> vs ${esc(abbr(league, t.dfn))}</span><span class="tv ${t.tilt >= 0 ? "up" : "dn"}">${t.tilt >= 0 ? "Favors offense" : "Favors defense"}</span></div>
+      ${tiltBar(t.tilt)}<div class="tch">${t.chips.map((c) => tiltChip(league, c)).join("")}</div>${tiltPlayers(g, league, t, rows)}</div>`;
+    const grid = [[g.away, g.home], [g.home, g.away]].map(([o, d]) => { const O = teamId(league, o), D = teamId(league, d), mine = T.filter((t) => t.off === O);
+      return `<div class="tmh2"><span>${logoImg(league, O)}${esc(abbr(league, O))} offense</span><span class="vs">vs</span><span>${logoImg(league, D)}${esc(abbr(league, D))} defense</span></div>` + mine.map((t) => `<div class="tg"><span class="l">${esc(t.label)}</span>${tiltBar(t.tilt)}<span class="tch">${t.chips.map((c) => tiltChip(league, c)).join("")}</span></div>`).join(""); }).join("");
+    return `<div class="panel" id="tiltP"><h3><span>Where this game tilts</span><span>biggest mismatches</span></h3>${top.map(card).join("")}
+      <details class="gbg"><summary><span>Every position matchup</span><span class="chev">›</span></summary>${grid}</details>
+      <div class="foot" style="margin:8px 0 0">Each position group's offense against what the other defense allows that position, opponent-adjusted. Green = good for the offense (a strong offense or a weak defense), red = good for the defense. Ranks out of ${(catsFor(league) && catsFor(league).pass_def && catsFor(league).pass_def.c.rows.length) || "—"}. Tap a line to open the prop. Context for your own read; it does not price anything.</div></div>`;
+  }
+
+  // ADR-0110: reference sections fold away; one tap opens them
+  const fold = (title, sub, body) => `<details class="panel why"><summary><span>${esc(title)}${sub ? ` <small style="text-transform:none;letter-spacing:0;font-weight:600">· ${esc(sub)}</small>` : ""}</span><span class="chev">›</span></summary>${body}</details>`;
   function openGame(g, league) {
     if (!g) return;
     const ta = team(league, g.away), th = team(league, g.home), m = g.model, w = when(g.kickoff_utc);
@@ -1354,13 +1419,14 @@
         <div style="margin-top:12px">${wpBar(g, league)}</div></div>
       ${gLiveWindow(g) ? `<div id="gLive"><div class="panel live"><h3><span><i class="dot2"></i>Live vs our numbers</span><span style="text-transform:none;letter-spacing:0">loading…</span></h3></div></div>` : ""}
       ${gameGlance(g, league)}
-      ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
-      ${matchupRead(g, league) ? `<div class="panel"><h3>Matchup read</h3>${matchupReadHtml(g, league, true)}</div>` : ""}
-      ${teamMatchupFb(g, league)}
-      ${(g.battles || []).length ? `<div class="panel"><h3><span>Unit matchups</span><span style="text-transform:none;letter-spacing:0">PFF · context, not in the projection</span></h3>${g.battles.map((b) => battleRow(b, league)).join("")}</div>` : (g.mismatches || []).length ? `<div class="panel"><h3>PFF matchups</h3><div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div></div>` : ""}
-      ${tdPanel(rows, league)}
+      ${tiltPanel(g, league, rows)}
       ${rows.length ? `<div class="panel"><h3><span>Props in this game</span><span>${rows.length}</span></h3><div id="gprops"></div></div>` : ""}
-      ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? `<div class="panel"><h3><span>Player projections</span><span>tap a player for his recent games</span></h3>${teamTable(g.away, g.teams[g.away], league)}${teamTable(g.home, g.teams[g.home], league)}</div>` : ""}`, true);
+      ${teamMatchupFb(g, league)}
+      ${tdPanel(rows, league)}
+      ${linesGrid(g, league) ? `<div class="panel"><h3>Hard Rock lines</h3>${linesGrid(g, league)}</div>` : ""}
+      ${(g.battles || []).length ? fold("Unit matchups", "PFF · context", g.battles.map((b) => battleRow(b, league)).join("")) : (g.mismatches || []).length ? fold("PFF matchups", "", `<div class="mism">${g.mismatches.map((x) => `<div class="i">${esc(x)}</div>`).join("")}</div>`) : ""}
+      ${matchupRead(g, league) ? fold("Matchup notes", "", matchupReadHtml(g, league, true)) : ""}
+      ${(g.teams && (g.teams[g.away] || g.teams[g.home])) ? fold("Player projections", "tap a player for his games", teamTable(g.away, g.teams[g.away], league) + teamTable(g.home, g.teams[g.home], league)) : ""}`, true);
     if (gLiveWindow(g)) gameLivePoll(g, league, s);
     const gp = $("#gprops", s);
     if (gp) gp.innerHTML = rows.slice(0, 40).map((r, k) => `<div class="partner" data-gp="${k}" style="cursor:pointer">${avatar(r.player_ref, league, r.form_team, "sm")}<div class="who"><b>${esc(r.player_ref)}</b><small>${esc(LABEL[r.market] || r.market)} ${sideLine(r)} · ${esc(bookName(r.book))}</small></div>${verdictChip(r) || `<span class="tag">${pct(shownP(r))}</span>`}</div>`).join("");
@@ -1370,6 +1436,7 @@
       const p = e.target.closest("[data-gp]"); if (p) openPlayer(rows[Number(p.dataset.gp)]);
       const pl = e.target.closest("[data-pl]"); if (pl) { const x = state.gpl[Number(pl.dataset.pl)]; if (x) openStatLog(x, g); return; }
       const td = e.target.closest("[data-td]"); if (td) openPlayer(state.tdRows[Number(td.dataset.td)]);
+      const tl = e.target.closest("[data-tilt]"); if (tl) { const r = state.tiltRows[Number(tl.dataset.tilt)]; if (r) openPlayer(r); return; }
       if (e.target.closest("[data-tdboard]")) openTdBoard();
     });
   }
