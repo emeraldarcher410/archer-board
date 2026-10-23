@@ -48,7 +48,7 @@
 
   // ------------------------------------------------------------------ state
   const state = {
-    tab: "props", league: store.get("archer-league", "nfl"), q: "", rows: [], meta: {}, games: {}, results: null, history: null, assets: null,
+    tab: "props", league: ["nfl", "cfb"].includes(store.get("archer-league", "nfl")) ? store.get("archer-league", "nfl") : "nfl", q: "", rows: [], meta: {}, games: {}, results: null, history: null, assets: null,
     f: Object.assign({ agree: 1, book: "all", market: "all", sort: "edge", watch: false, started: false, kind: "all" }, store.get("archer-filters", {})),
     day: "all", betFilter: "open", recFilter: "fav", gpl: [],
     slip: store.get("archer-slip-v1", []), bets: store.get("archer-bets-v1", []),
@@ -306,7 +306,6 @@
     return rows.sort(by[f.sort] || by.edge);
   }
   function renderTops() {
-    if (state.league === "soccer") return; // S-020: soccer draws its own view
     const all = groupRows(leagueRows().filter((r) => r.fav && !r.volume && !hold(r) && !when(r.commence_time).locked).sort((x, y) => (y.edge ?? 0) - (x.edge ?? 0)));
     // ADR-0085: two rows - what we think hits more often than not, then price ("value") picks
     const lik = all.filter((r) => (r.p_model ?? 0) >= LIKELY).slice(0, 6), val = all.filter((r) => (r.p_model ?? 0) < LIKELY).slice(0, 6);
@@ -381,7 +380,6 @@
       return `<button class="alsoc ${ok ? "ok" : ""}" data-also="${i}" type="button"><b>${esc(bookName(x.book))}</b> ${isTD(x) ? "" : `${x.side === "over" ? "o" : "u"}${x.line}`}${x.dfs ? "" : ` ${odds(x.price)}`} · ${pct(shownP(x))}<small> / ${pct(be)}</small></button>`; }).join("")}</div>`;
   }
   function renderProps() {
-    if (state.league === "soccer") return; // S-020: soccer draws its own view
     renderSlate();
     renderTops();
     const rows = groupRows(filtered(), listRows().filter((r) => !when(r.commence_time).locked));
@@ -1119,7 +1117,6 @@
   }
   const gameDate = (g) => { const k = g.kickoff_utc ? new Date(g.kickoff_utc) : g.kickoff ? new Date(String(g.kickoff).slice(0, 10) + "T12:00:00") : null; return k && !isNaN(k) ? k.toDateString() : ""; };
   function renderGames() {
-    if (state.league === "soccer") return; // S-020: soccer draws its own view
     const league = state.league, all = (league === "cfb" ? state.games.cfb_games : state.games.games) || [];
     let games = all;
     if (state.day === "today") games = games.filter((g) => gameDate(g) === localDate(0));
@@ -1918,7 +1915,6 @@
     return `<div class="kpi ${cls}" style="grid-column:1/-1"><b>${sign}${pts.replace("-", "")} pts</b><span style="white-space:normal">line moves toward our picks before kickoff · ${esc(say)}</span></div>`;
   }
   function renderRecord() {
-    if (state.league === "soccer") return; // S-020: soccer draws its own view
     // NFL leans (ADR-0092) are an NFL-only rule: no tab for college, and a college view never
     // sits on it
     const leanChip = $('#recFilters [data-rec="lean"]'), nfl = state.league !== "cfb";
@@ -2700,7 +2696,6 @@
       const row = e.target.closest("[data-key]"); if (row) { const r = byKey.get(row.dataset.key); if (r) openPlayer(r); }
     };
     clearTimeout(seenTimer); seenTimer = setTimeout(() => { if (state.tab === "today" && !document.hidden) markSeen(); }, 5000);
-    soccerModule().then((m) => { try { if (state.tab === "today" && m.today) m.today(el); } catch (_) { /* soccer never breaks Today */ } }).catch(() => {});
   }
 
   // ---- pull to refresh (re-reads the published board; never spends credits)
@@ -2822,10 +2817,7 @@
     state.tab = tab;
     const hl = tab === "record" ? "bets" : tab;
     $$(".tabbar button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === hl)));
-    const soc = state.league === "soccer" && SOCCER_TABS.includes(tab); // S-020
-    for (const v of TABS) $(`#${v}View`).classList.toggle("hidden", tab !== v || soc);
-    $("#soccerView").classList.toggle("hidden", !soc);
-    if (soc) soccerRender();
+    for (const v of TABS) $(`#${v}View`).classList.toggle("hidden", tab !== v);
     $("#leagueSeg").style.visibility = ["props", "games", "record"].includes(tab) ? "visible" : "hidden";
     store.set("archer-tab", tab);
     if (tab === "slip") renderSlip();
@@ -2846,33 +2838,10 @@
   function setLeague(lg) {
     state.league = lg; store.set("archer-league", lg);
     $$("#leagueSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.league === lg)));
-    if (lg === "soccer" || $("#soccerView").classList.contains("hidden") === false) { show(state.tab); if (lg === "soccer") return; }
     state.f.market = "all"; state.f.book = "all"; saveF();
     renderProps(); renderGames(); if (state.tab === "record") renderRecord(); if (state.gseg === "ranks") renderRankings();
   }
   $("#leagueSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-league]"); if (b) setLeague(b.dataset.league); });
-
-  // S-020: soccer's code lives in the soccer folder and loads only when needed. It draws with
-  // the same sheets, charts and chips as football through window.Archer.
-  const SOCCER_TABS = ["props", "games", "record"];
-  let soccerLoading = null;
-  function soccerModule() {
-    if (window.ArcherSoccer) return Promise.resolve(window.ArcherSoccer);
-    if (!soccerLoading) soccerLoading = new Promise((ok, no) => {
-      const sc = document.createElement("script"); sc.src = `./soccer/soccer.js?v=${Date.now()}`;
-      sc.onload = () => (window.ArcherSoccer ? ok(window.ArcherSoccer) : no(new Error("soccer module")));
-      sc.onerror = () => { soccerLoading = null; no(new Error("soccer module")); };
-      document.head.appendChild(sc);
-    });
-    return soccerLoading;
-  }
-  function soccerRender() {
-    const el = $("#soccerView");
-    if (!window.ArcherSoccer) el.innerHTML = `<div class="sk"></div><div class="sk"></div>`;
-    soccerModule().then((m) => { if (state.league === "soccer" && SOCCER_TABS.includes(state.tab)) m.render(state.tab, el); })
-      .catch(() => { el.innerHTML = `<div class="empty" style="margin-top:14px"><b>Soccer isn't published yet</b>It appears after the next soccer update.</div>`; });
-  }
-  window.Archer = { esc, pct, fmt1, odds, when, openSheet, closeSheet, statChart, ring, buzz, toast, store, show, countdown };
 
   const get = (f) => fetch(`./data/${f}?v=${Date.now()}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const assetsReady = get("assets.json").then((a) => { state.assets = a; });
