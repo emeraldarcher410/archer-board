@@ -960,6 +960,7 @@
     const v = r.proj_median ?? r.proj_mean ?? r.form_mean; return v == null ? null : Number(v);
   }
   const projVal = (p, key) => boardProj(p.player, key) ?? (p.proj ? p.proj[key] : null);
+  const simRange = (p, key) => { const s = p.sim && p.sim[key]; return s && s.q10 != null && s.q90 != null ? `<div style="font-size:10px;color:var(--ink-3);line-height:1.1">${Math.round(s.q10)}–${Math.round(s.q90)}</div>` : ""; };
   function teamTable(id, blk, league) {
     if (!blk) return "";
     const sub = league === "nfl" ? `implied ${fmt1(blk.implied_points)} pts · QB att ${fmt1(blk.qb_pass_att)}` : `model ${fmt1(blk.model_points)} pts · recent ${fmt1(blk.recent_points)}`;
@@ -971,9 +972,11 @@
       const ps = (blk.players || []).filter((p) => p.pos === g); if (!ps.length) continue;
       const cols = COLS[league][g];
       html += `<table class="pl"><thead><tr><th>${g}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
-      for (const p of ps) { const f = face(league, p.player, id); state.gpl.push({ p, team: id, league }); html += `<tr class="plrow" data-pl="${state.gpl.length - 1}"><td>${faceImg(f, "mini")}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}${p.log && p.log.length ? ' <span class="chev2">›</span>' : ""}</td>${cols.map((c) => `<td>${fmt1(projVal(p, c[0]))}</td>`).join("")}</tr>`; }
+      for (const p of ps) { const f = face(league, p.player, id); state.gpl.push({ p, team: id, league }); html += `<tr class="plrow" data-pl="${state.gpl.length - 1}"><td>${faceImg(f, "mini")}${esc(p.player)}${p.status === "Q" ? ' <span class="st q">Q</span>' : ""}${p.log && p.log.length ? ' <span class="chev2">›</span>' : ""}</td>${cols.map((c) => `<td>${fmt1(projVal(p, c[0]))}${simRange(p, c[0])}</td>`).join("")}</tr>`; }
       html += `</tbody></table>`;
     }
+    // ADR-0112: ranges only for the stats that passed the pre-registered simulation test
+    if ((blk.players || []).some((p) => p.sim)) html += `<div class="sub" style="font-size:11px;color:var(--ink-3);margin:4px 2px 0">Small numbers: the range 8 in 10 of 20,000 simulated games landed in (QB completions, RB rushing yards).</div>`;
     return html;
   }
   function gameLegs(g, league) {
